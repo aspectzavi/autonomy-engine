@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC
-from logging import Logger, getLogger
+from logging import Logger
 
 from backend.core.kernel.exceptions import LifecycleError
 from backend.core.kernel.health import ServiceHealth
@@ -26,6 +26,12 @@ from backend.core.kernel.lifecycle import (
 )
 from backend.core.kernel.metadata import ServiceMetadata
 from backend.core.kernel.runtime_info import ServiceRuntimeInfo
+from backend.core.observability.logger import (
+    KernelLogger,
+)
+from backend.core.observability.events import (
+    EventBus,
+)
 
 
 class KernelService(Lifecycle, ABC):
@@ -40,10 +46,15 @@ class KernelService(Lifecycle, ABC):
     def __init__(
         self,
         metadata: ServiceMetadata,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._metadata = metadata
 
-        self._logger: Logger = getLogger(metadata.name)
+        self._logger: Logger = KernelLogger().get(
+            metadata.name,
+        )
+
+        self._events = event_bus or EventBus()
 
         self._health = ServiceHealth()
 
@@ -98,6 +109,25 @@ class KernelService(Lifecycle, ABC):
         Whether the service is currently running.
         """
         return self.lifecycle.is_running
+    
+    @property
+    def events(self) -> EventBus:
+        """
+        Event bus used by the service.
+        """
+        return self._events
+    
+    def attach_event_bus(
+        self,
+        event_bus: EventBus,
+    ) -> None:
+        """
+        Attach shared event bus.
+
+        Used by the kernel bootstrap layer to inject
+        the global runtime event stream.
+        """
+        self._events = event_bus    
 
     # ------------------------------------------------------------------
     # Public Lifecycle API
@@ -171,6 +201,13 @@ class KernelService(Lifecycle, ABC):
                 self.metadata.name,
             )
 
+            self.events.publish(
+                "service.started",
+                {
+                    "service": self.metadata.name,
+                },
+            )
+
         except Exception as exc:
             self.lifecycle.transition_to(LifecycleState.FAILED)
 
@@ -213,6 +250,13 @@ class KernelService(Lifecycle, ABC):
             self.logger.info(
                 "Service '%s' stopped.",
                 self.metadata.name,
+            )
+
+            self.events.publish(
+                "service.stopped",
+                {
+                    "service": self.metadata.name,
+                },
             )
 
         except Exception as exc:
