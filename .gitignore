@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Runtime
+logs/
+artifacts/
+screenshots/
+recordings/
+
+# OS
+.DS_Store
+Thumbs.db
