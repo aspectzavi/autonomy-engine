@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from backend.core.agents.goal import Goal
 from backend.core.workflows.workflow import Workflow
 
 
@@ -21,7 +22,7 @@ class WorkflowPlanner(ABC):
     @abstractmethod
     async def plan(
         self,
-        goal: str,
+        goal: Goal,
     ) -> Workflow:
         """
         Create a workflow for the given goal.

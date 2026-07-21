@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from backend.core.workflows.planner import WorkflowPlanner
 from backend.core.workflows.workflow import Workflow
-
+from backend.core.agents.goal import Goal
 
 class SimpleWorkflowPlanner(WorkflowPlanner):
     """
@@ -15,6 +15,8 @@ class SimpleWorkflowPlanner(WorkflowPlanner):
 
     async def plan(
         self,
-        goal: str,
+        goal: Goal,
     ) -> Workflow:
-        return Workflow(name=goal)
+        return Workflow(
+            name=goal.description,
+        )
