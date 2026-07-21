@@ -6,6 +6,9 @@ Registers agent infrastructure into the dependency injection container.
 
 from __future__ import annotations
 
+from backend.agents.planning.planning_agent import (
+    PlanningAgent,
+)
 from backend.app.container.container import Container
 from backend.core.agents.manager import AgentManager
 from backend.core.agents.registry import AgentRegistry
@@ -32,4 +35,11 @@ def register_agents(
     ):
         container.register_singleton(
             AgentManager,
+        )
+
+    if not container.contains(
+        PlanningAgent,
+    ):
+        container.register_transient(
+            PlanningAgent,
         )

@@ -26,7 +26,7 @@ from backend.core.observability.container import (
     ObservabilityContainer,
 )
 from backend.core.config.config import EngineConfig
-
+from backend.app.container.service_locator import ServiceLocator
 
 class Application:
     """
@@ -54,6 +54,10 @@ class Application:
 
         self._observability = ObservabilityContainer()
 
+        self._services = ServiceLocator(
+            self.container,
+        )
+
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
@@ -72,7 +76,16 @@ class Application:
         """
         Return the dependency injection container.
         """
-        return self.bootstrap.container   
+        return self.bootstrap.container  
+
+    @property
+    def services(
+        self,
+    ) -> ServiceLocator:
+        """
+        Return the runtime service locator.
+        """
+        return self._services 
     
     @property
     def config(

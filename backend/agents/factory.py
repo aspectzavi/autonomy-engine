@@ -1,22 +1,21 @@
 """
 Agent factory.
 
-Creates and registers concrete autonomous agents.
+Creates and registers the framework's built-in autonomous agents.
 """
 
 from __future__ import annotations
 
+from backend.agents.planning.planning_agent import PlanningAgent
 from backend.app.container.container import Container
 from backend.core.agents.agent import Agent
 from backend.core.agents.registry import AgentRegistry
-from backend.agents.planning.planning_agent import PlanningAgent
+
 
 class AgentFactory:
     """
-    Factory for constructing autonomous agents.
-
-    The factory owns the composition of concrete agent
-    implementations but does not execute them.
+    Factory responsible for constructing and registering
+    the framework's built-in autonomous agents.
     """
 
     def __init__(
@@ -33,18 +32,41 @@ class AgentFactory:
     # ------------------------------------------------------------------
 
     @property
-    def container(self) -> Container:
+    def container(
+        self,
+    ) -> Container:
         """
         Dependency injection container.
         """
         return self._container
 
     @property
-    def registry(self) -> AgentRegistry:
+    def registry(
+        self,
+    ) -> AgentRegistry:
         """
         Agent registry.
         """
         return self._registry
+
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
+
+    def create_all(
+        self,
+    ) -> tuple[Agent, ...]:
+        """
+        Create all built-in agents.
+
+        Agents are resolved through the dependency injection container
+        so their dependencies can be injected automatically.
+        """
+        return (
+            self.container.resolve(
+                PlanningAgent,
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Registration
@@ -57,38 +79,28 @@ class AgentFactory:
         """
         Register an agent instance.
         """
-        self.registry.register(agent)
+        self.registry.register(
+            agent,
+        )
 
         return agent
 
-    # ------------------------------------------------------------------
-    # Build
-    # ------------------------------------------------------------------
-
-    def build(self) -> None:
+    def register_all(
+        self,
+    ) -> None:
         """
-        Build and register the default agent set.
+        Register all built-in agents.
 
-        Concrete agents are added here as they become available.
+        Registration is idempotent. Agents that are already registered
+        are skipped.
         """
-
-        # Example (future):
-        #
-        # self.register(
-        #     BrowserAgent(...)
-        # )
-        #
-        # self.register(
-        #     CodingAgent(...)
-        # )
-        #
-        # self.register(
-        #     DesktopAgent(...)
-        # )
-        #
-        self.register(
-            PlanningAgent()
-        )
+        for agent in self.create_all():
+            if not self.registry.contains(
+                agent.name,
+            ):
+                self.register(
+                    agent,
+                )
 
     # ------------------------------------------------------------------
     # Diagnostics
@@ -100,12 +112,14 @@ class AgentFactory:
         """
         Return factory diagnostics.
         """
+        agents = self.create_all()
+
         return {
-            "registered_agents": len(
-                self.registry,
+            "agent_count": len(
+                agents,
             ),
             "agents": [
                 agent.name
-                for agent in self.registry
+                for agent in agents
             ],
         }

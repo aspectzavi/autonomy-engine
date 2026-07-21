@@ -33,6 +33,16 @@ from backend.core.kernel.service import KernelService
 from backend.core.observability.events import EventBus
 from backend.core.config.config import EngineConfig
 from backend.core.config.loader import ConfigurationLoader
+from backend.core.services.tool_service import ToolService
+from backend.core.services.agent_service import (
+    AgentService,
+)
+from backend.core.services.workflow_service import (
+    WorkflowService,
+)
+from backend.app.container.runtime_services import (
+    register_runtime_services,
+)
 
 
 class KernelBootstrap:
@@ -60,9 +70,31 @@ class KernelBootstrap:
 
         self._container = Container()
 
+        register_runtime_services(
+            self._container,
+        )
+
         self._container.register_instance(
             EngineConfig,
             self._config,
+        )
+
+        self._tool_service = (
+            self._container.resolve(
+                ToolService,
+            )
+        )
+
+        self._agent_service = (
+            self._container.resolve(
+                AgentService,
+            )
+        )
+
+        self._workflow_service = (
+            self._container.resolve(
+                WorkflowService,
+            )
         )
 
         self._wiring = ContainerWiring(
@@ -78,6 +110,18 @@ class KernelBootstrap:
         self._runtime = Runtime(
             registry=self._registry,
             dependency_graph=self._graph,
+        )
+
+        self.register_service(
+            self._tool_service,
+        )
+
+        self.register_service(
+            self._agent_service,
+        )
+
+        self.register_service(
+            self._workflow_service,
         )
 
     # ------------------------------------------------------------------
@@ -137,6 +181,33 @@ class KernelBootstrap:
         Shared kernel event bus.
         """
         return self._events
+    
+    @property
+    def tool_service(
+        self,
+    ) -> ToolService:
+        """
+        Return the runtime tool service.
+        """
+        return self._tool_service
+    
+    @property
+    def agent_service(
+        self,
+    ) -> AgentService:
+        """
+        Return the runtime agent service.
+        """
+        return self._agent_service
+
+    @property
+    def workflow_service(
+        self,
+    ) -> WorkflowService:
+        """
+        Return the runtime workflow service.
+        """
+        return self._workflow_service
 
     # ------------------------------------------------------------------
     # DI Wiring
@@ -269,4 +340,15 @@ class KernelBootstrap:
             "runtime": (
                 self.runtime.diagnostics()
             ),
+            "tool_service": (
+                self.tool_service.diagnostics()
+            ),
+            "agent_service": (
+                self.agent_service.diagnostics()
+            ),
+            "workflow_service": (
+                self.workflow_service.diagnostics()
+            ),
         }
+        
+        
