@@ -13,7 +13,7 @@ from backend.core.agents.goal import Goal
 from backend.core.agents.result import AgentResult
 from backend.core.agents.state import AgentState
 from backend.core.workflows.executor import WorkflowExecutor
-from backend.core.workflows.planner import WorkflowPlanner
+from backend.core.agents.planner import AgentPlanner
 from backend.core.tasks.context import TaskContext
 
 class Agent(ABC):
@@ -28,7 +28,7 @@ class Agent(ABC):
         self,
         *,
         name: str,
-        planner: WorkflowPlanner,
+        planner: AgentPlanner,
         workflow_executor: WorkflowExecutor | None = None,
     ) -> None:
         self._name = name
@@ -51,7 +51,7 @@ class Agent(ABC):
         return self._name
 
     @property
-    def planner(self) -> WorkflowPlanner:
+    def planner(self) -> AgentPlanner:
         """
         Workflow planner used by the agent.
         """

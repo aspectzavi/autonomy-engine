@@ -15,6 +15,11 @@ Service execution belongs to Runtime.
 
 from __future__ import annotations
 
+from backend.app.container.container import Container
+from backend.app.container.agent_factory import (
+    create_agent_factory,
+)
+
 from backend.core.kernel.bootstrap import KernelBootstrap
 from backend.core.kernel.runtime import Runtime
 from backend.core.observability.container import (
@@ -36,6 +41,12 @@ class Application:
             or KernelBootstrap()
         )
 
+        self._bootstrap.wire_agents()
+
+        create_agent_factory(
+            self.container,
+        )
+
         self._runtime: Runtime | None = None
 
         self._started = False
@@ -52,6 +63,15 @@ class Application:
         Return bootstrap instance.
         """
         return self._bootstrap
+    
+    @property
+    def container(
+        self,
+    ) -> Container:
+        """
+        Return the dependency injection container.
+        """
+        return self.bootstrap.container   
 
     @property
     def runtime(self) -> Runtime:
