@@ -21,6 +21,7 @@ from typing import Any
 
 from backend.app.container.container import Container
 from backend.app.container.wiring import ContainerWiring
+from backend.app.container.agents import register_agents
 
 from backend.core.kernel.dependency_graph import DependencyGraph
 from backend.core.kernel.registry import (
@@ -114,6 +115,19 @@ class KernelBootstrap:
         )
 
         return self
+    
+    def wire_agents(
+        self,
+    ) -> "KernelBootstrap":
+        """
+        Register agent infrastructure.
+        """
+
+        register_agents(
+            self._container,
+        )
+
+        return self    
 
     # ------------------------------------------------------------------
     # Kernel Registration

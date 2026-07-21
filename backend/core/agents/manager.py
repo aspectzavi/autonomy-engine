@@ -6,11 +6,12 @@ Coordinates autonomous agents through the agent registry.
 
 from __future__ import annotations
 
+from backend.core.agents.agent import Agent
+from backend.core.agents.context import AgentContext
 from backend.core.agents.goal import Goal
 from backend.core.agents.registry import AgentRegistry
 from backend.core.agents.result import AgentResult
 from backend.core.tasks.context import TaskContext
-from backend.core.agents.agent import Agent
 
 class AgentManager:
     """
@@ -51,7 +52,10 @@ class AgentManager:
         """
         self.registry.register(agent)
 
-    def unregister(self, name: str) -> None:
+    def unregister(
+        self,
+        name: str,
+    ) -> None:
         """
         Unregister an agent.
         """
@@ -70,6 +74,14 @@ class AgentManager:
         """
         return self.registry.get(name)
 
+    def agents(
+        self,
+    ) -> tuple[Agent, ...]:
+        """
+        Return all registered agents.
+        """
+        return tuple(self.registry)
+
     # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
@@ -80,26 +92,34 @@ class AgentManager:
         agent: str,
         goal: Goal,
         task_context: TaskContext,
+        context: AgentContext | None = None,
     ) -> AgentResult:
         """
         Execute a goal using the specified agent.
         """
-        selected = self.registry.get(agent)
+        selected = self.get(agent)
 
         return await selected.execute(
             goal=goal,
             task_context=task_context,
+            context=context,
         )
 
     # ------------------------------------------------------------------
     # Diagnostics
     # ------------------------------------------------------------------
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(
+        self,
+    ) -> dict[str, object]:
         """
         Return manager diagnostics.
         """
         return {
             "registered_agents": len(self.registry),
+            "agents": [
+                agent.name
+                for agent in self.agents()
+            ],
             "registry": self.registry.diagnostics(),
         }
