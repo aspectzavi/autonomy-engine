@@ -7,19 +7,37 @@ Creates and registers the framework's built-in tools.
 from __future__ import annotations
 
 from backend.core.tools.manager import ToolManager
+from backend.core.tools.tool import Tool
+from backend.tools.filesystem.read_file_tool import (
+    ReadFileTool,
+)
 from backend.tools.shell.echo_tool import EchoTool
 from backend.tools.shell.execute_command_tool import (
     ExecuteCommandTool,
-)
-from backend.tools.filesystem.read_file_tool import (
-    ReadFileTool,
 )
 
 
 class BuiltinToolFactory:
     """
-    Factory responsible for registering built-in tools.
+    Factory responsible for constructing and registering
+    the framework's built-in tools.
     """
+
+    # ------------------------------------------------------------------
+    # Construction
+    # ------------------------------------------------------------------
+
+    def create_all(
+        self,
+    ) -> tuple[Tool, ...]:
+        """
+        Create all built-in tools.
+        """
+        return (
+            EchoTool(),
+            ExecuteCommandTool(),
+            ReadFileTool(),
+        )
 
     # ------------------------------------------------------------------
     # Registration
@@ -31,19 +49,13 @@ class BuiltinToolFactory:
     ) -> None:
         """
         Register all built-in tools.
+
+        Registration is idempotent. Tools that are already
+        registered are skipped.
         """
-
-        manager.register(
-            EchoTool(),
-        )
-
-        manager.register(
-            ExecuteCommandTool(),
-        )
-
-        manager.register(
-            ReadFileTool(),
-        )
+        for tool in self.create_all():
+            if not manager.contains(tool.name):
+                manager.register(tool)
 
     # ------------------------------------------------------------------
     # Diagnostics
@@ -55,11 +67,10 @@ class BuiltinToolFactory:
         """
         Return factory diagnostics.
         """
-
         return {
+            "tool_count": len(self.create_all()),
             "tools": [
-                EchoTool.__name__,
-                ExecuteCommandTool.__name__,
-                ReadFileTool.__name__,
+                tool.name
+                for tool in self.create_all()
             ],
         }
