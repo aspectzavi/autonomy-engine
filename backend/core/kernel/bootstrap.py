@@ -31,6 +31,9 @@ from backend.core.kernel.registry import (
 from backend.core.kernel.runtime import Runtime
 from backend.core.kernel.service import KernelService
 from backend.core.observability.events import EventBus
+from backend.core.config.config import EngineConfig
+from backend.core.config.loader import ConfigurationLoader
+
 
 class KernelBootstrap:
     """
@@ -39,19 +42,37 @@ class KernelBootstrap:
     Acts as the composition root.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        configuration_loader: ConfigurationLoader | None = None,
+    ) -> None:
+        self._configuration_loader = (
+            configuration_loader
+            or ConfigurationLoader()
+        )
+
+        self._config = (
+            self._configuration_loader.load()
+        )
+
         self._events = EventBus()
 
         self._container = Container()
 
+        self._container.register_instance(
+            EngineConfig,
+            self._config,
+        )
+
         self._wiring = ContainerWiring(
-            self._container
+            self._container,
         )
 
         self._registry = ServiceRegistry()
 
         self._graph = DependencyGraph(
-            self._registry
+            self._registry,
         )
 
         self._runtime = Runtime(
@@ -90,6 +111,25 @@ class KernelBootstrap:
         Return kernel runtime.
         """
         return self._runtime
+    
+    @property
+    def configuration_loader(
+        self,
+    ) -> ConfigurationLoader:
+        """
+        Return the configuration loader.
+        """
+        return self._configuration_loader
+
+
+    @property
+    def config(
+        self,
+    ) -> EngineConfig:
+        """
+        Return the engine configuration.
+        """
+        return self._config
     
     @property
     def events(self) -> EventBus:
@@ -214,8 +254,19 @@ class KernelBootstrap:
         """
 
         return {
-            "container": self._container.diagnostics(),
-            "registry": self._registry.diagnostics(),
-            "dependency_graph": self._graph.diagnostics(),
-            "runtime": self._runtime.diagnostics(),
+            "configuration": (
+                self.config.diagnostics()
+            ),
+            "container": (
+                self.container.diagnostics()
+            ),
+            "registry": (
+                self.registry.diagnostics()
+            ),
+            "dependency_graph": (
+                self.dependency_graph.diagnostics()
+            ),
+            "runtime": (
+                self.runtime.diagnostics()
+            ),
         }

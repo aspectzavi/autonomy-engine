@@ -25,7 +25,10 @@ from backend.app.container.exceptions import (
     ServiceAlreadyRegisteredError,
 )
 from backend.app.container.lifetime import ServiceLifetime
-from backend.app.container.provider import ClassProvider
+from backend.app.container.provider import (
+    ClassProvider,
+    InstanceProvider,
+)
 from backend.app.container.registration import ServiceRegistration
 from backend.app.container.resolver import DependencyResolver
 from backend.app.container.scopes import Scope
@@ -107,6 +110,24 @@ class Container:
                     implementation or service_type
                 ),
                 lifetime=ServiceLifetime.TRANSIENT,
+            )
+        )
+
+    def register_instance(
+        self,
+        service_type: type[T],
+        instance: T,
+    ) -> None:
+        """
+        Register an existing singleton instance.
+        """
+        self.register(
+            ServiceRegistration(
+                service_type=service_type,
+                provider=InstanceProvider(
+                    instance,
+                ),
+                lifetime=ServiceLifetime.SINGLETON,
             )
         )
 
