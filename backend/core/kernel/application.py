@@ -25,6 +25,7 @@ from backend.core.kernel.runtime import Runtime
 from backend.core.observability.container import (
     ObservabilityContainer,
 )
+from backend.core.config.config import EngineConfig
 
 
 class Application:
@@ -72,6 +73,15 @@ class Application:
         Return the dependency injection container.
         """
         return self.bootstrap.container   
+    
+    @property
+    def config(
+        self,
+    ) -> EngineConfig:
+        """
+        Return the shared engine configuration.
+        """
+        return self.bootstrap.config    
 
     @property
     def runtime(self) -> Runtime:
@@ -110,8 +120,10 @@ class Application:
 
         if self._started:
             return
+        
+        runtime = self.runtime
 
-        await self.runtime.start()
+        await runtime.start()
 
         self._started = True
 
@@ -122,8 +134,10 @@ class Application:
 
         if not self._started:
             return
+        
+        runtime = self.runtime
 
-        await self.runtime.stop()
+        await runtime.stop()
 
         self._started = False
 
@@ -148,9 +162,16 @@ class Application:
         """
 
         return {
-            "running": self._started,
-            "runtime": self.runtime.diagnostics(),
+            "running": self.is_running,
+            "configuration": (
+                self.config.diagnostics()
+            ),
+            "runtime": (
+                self.runtime.diagnostics()
+            ),
             "observability": {
-                "events": self.observability.events.diagnostics(),
+                "events": (
+                    self.observability.events.diagnostics()
+                ),
             },
         }
