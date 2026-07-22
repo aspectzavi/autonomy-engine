@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from backend.app.container.container import Container
-from backend.core.kernel.runtime import Runtime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.core.kernel.runtime import Runtime
 from backend.core.observability.events import EventBus
 from backend.core.observability.logger import KernelLogger
 

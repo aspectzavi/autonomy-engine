@@ -9,11 +9,14 @@ are cached independently from the parent container.
 
 from __future__ import annotations
 
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from backend.app.container.container import Container
-from backend.app.container.registration import ServiceRegistration
 from backend.app.container.lifetime import ServiceLifetime
+from backend.app.container.registration import ServiceRegistration
+
+
+if TYPE_CHECKING:
+    from backend.app.container.container import Container
 
 
 T = TypeVar("T")
@@ -51,18 +54,20 @@ class Scope:
         self._ensure_active()
 
         registration = self._get_registration(
-            service_type
+            service_type,
         )
 
         if registration is None:
             return self._container.resolve(
-                service_type
+                service_type,
             )
 
         if registration.lifetime is ServiceLifetime.SCOPED:
             if service_type not in self._instances:
                 self._instances[service_type] = (
-                    registration.provider.provide()
+                    registration.provider.provide(
+                        self._container,
+                    )
                 )
 
             return cast(
@@ -71,7 +76,7 @@ class Scope:
             )
 
         return self._container.resolve(
-            service_type
+            service_type,
         )
 
     # ------------------------------------------------------------------
@@ -96,7 +101,9 @@ class Scope:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def dispose(self) -> None:
+    def dispose(
+        self,
+    ) -> None:
         """
         Dispose the scope and clear scoped instances.
         """
@@ -108,14 +115,16 @@ class Scope:
 
         self._disposed = True
 
-    def _ensure_active(self) -> None:
+    def _ensure_active(
+        self,
+    ) -> None:
         """
         Ensure the scope has not been disposed.
         """
 
         if self._disposed:
             raise RuntimeError(
-                "Scope has already been disposed."
+                "Scope has already been disposed.",
             )
 
     # ------------------------------------------------------------------
@@ -128,19 +137,25 @@ class Scope:
         """
         Return scope diagnostics.
         """
+
         return {
             "disposed": self._disposed,
-            "instance_count": len(self._instances),
+            "instance_count": len(
+                self._instances,
+            ),
             "instances": [
                 service.__name__
                 for service in self._instances
             ],
         }
 
-    def __enter__(self) -> "Scope":
+    def __enter__(
+        self,
+    ) -> Scope:
         """
         Enter scope context.
         """
+
         self._ensure_active()
 
         return self
@@ -154,4 +169,5 @@ class Scope:
         """
         Exit scope context.
         """
+
         self.dispose()

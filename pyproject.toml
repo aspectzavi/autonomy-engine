@@ -37,6 +37,9 @@ profile = "black"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = [
+    ".",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -48,3 +51,4 @@ target-version = "py312"
 
 [tool.coverage.run]
 branch = true
+

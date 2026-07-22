@@ -13,7 +13,11 @@ Supported creation strategies:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar, cast
+
+
+if TYPE_CHECKING:
+    from backend.app.container.container import Container
 
 
 T = TypeVar("T")
@@ -24,7 +28,10 @@ class Provider(Generic[T]):
     Base provider abstraction.
     """
 
-    def provide(self) -> T:
+    def provide(
+        self,
+        container: Container,
+    ) -> T:
         """
         Create or return a service instance.
         """
@@ -34,6 +41,9 @@ class Provider(Generic[T]):
 class ClassProvider(Provider[T]):
     """
     Provider that constructs a class.
+
+    Uses the dependency resolver from the container
+    to perform constructor injection.
     """
 
     def __init__(
@@ -42,11 +52,20 @@ class ClassProvider(Provider[T]):
     ) -> None:
         self._implementation = implementation
 
-    def provide(self) -> T:
+    def provide(
+        self,
+        container: Container,
+    ) -> T:
         """
-        Instantiate the implementation.
+        Instantiate using container injection.
         """
-        return self._implementation()
+
+        return cast(
+            T,
+            container._resolver._construct(
+                self._implementation,
+            ),
+        )
 
 
 class FactoryProvider(Provider[T]):
@@ -60,10 +79,14 @@ class FactoryProvider(Provider[T]):
     ) -> None:
         self._factory = factory
 
-    def provide(self) -> T:
+    def provide(
+        self,
+        container: Container,
+    ) -> T:
         """
         Execute factory.
         """
+
         return self._factory()
 
 
@@ -78,8 +101,12 @@ class InstanceProvider(Provider[T]):
     ) -> None:
         self._instance = instance
 
-    def provide(self) -> T:
+    def provide(
+        self,
+        container: Container,
+    ) -> T:
         """
         Return stored instance.
         """
+
         return self._instance

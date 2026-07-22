@@ -120,15 +120,17 @@ class Container:
     ) -> None:
         """
         Register an existing singleton instance.
+
+        Existing registrations are replaced because instance
+        registrations are explicit composition-root overrides.
         """
-        self.register(
-            ServiceRegistration(
-                service_type=service_type,
-                provider=InstanceProvider(
-                    instance,
-                ),
-                lifetime=ServiceLifetime.SINGLETON,
-            )
+
+        self._registrations[service_type] = ServiceRegistration(
+            service_type=service_type,
+            provider=InstanceProvider(
+                instance,
+            ),
+            lifetime=ServiceLifetime.SINGLETON,
         )
 
     # ------------------------------------------------------------------
@@ -176,6 +178,17 @@ class Container:
         Check whether a service is registered.
         """
         return service_type in self._registrations
+
+    def registration(
+        self,
+        service_type: type[Any],
+    ) -> ServiceRegistration[Any] | None:
+        """
+        Return service registration if available.
+        """
+        return self._registrations.get(
+            service_type,
+        )
 
     def registrations(
         self,

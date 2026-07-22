@@ -27,6 +27,10 @@ from backend.core.observability.container import (
 )
 from backend.core.config.config import EngineConfig
 from backend.app.container.service_locator import ServiceLocator
+from backend.core.services.agent_service import AgentService
+from backend.core.services.tool_service import ToolService
+from backend.core.services.workflow_service import WorkflowService
+
 
 class Application:
     """
@@ -86,6 +90,33 @@ class Application:
         Return the runtime service locator.
         """
         return self._services 
+
+    @property
+    def tool_service(
+        self,
+    ) -> ToolService:
+        """
+        Return the runtime tool service.
+        """
+        return self.services.tools
+
+    @property
+    def agent_service(
+        self,
+    ) -> AgentService:
+        """
+        Return the runtime agent service.
+        """
+        return self.services.agents
+
+    @property
+    def workflow_service(
+        self,
+    ) -> WorkflowService:
+        """
+        Return the runtime workflow service.
+        """
+        return self.services.workflows    
     
     @property
     def config(

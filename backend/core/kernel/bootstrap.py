@@ -31,6 +31,8 @@ from backend.core.kernel.registry import (
 from backend.core.kernel.runtime import Runtime
 from backend.core.kernel.service import KernelService
 from backend.core.observability.events import EventBus
+from backend.core.observability.tracing import Tracing
+from backend.core.observability.logger import KernelLogger
 from backend.core.config.config import EngineConfig
 from backend.core.config.loader import ConfigurationLoader
 from backend.core.services.tool_service import ToolService
@@ -42,6 +44,9 @@ from backend.core.services.workflow_service import (
 )
 from backend.app.container.runtime_services import (
     register_runtime_services,
+)
+from backend.core.kernel.runtime_context import (
+    RuntimeContext,
 )
 
 
@@ -67,6 +72,10 @@ class KernelBootstrap:
         )
 
         self._events = EventBus()
+
+        self._logger = KernelLogger()
+
+        self._tracing = Tracing()
 
         self._container = Container()
 
@@ -110,6 +119,28 @@ class KernelBootstrap:
         self._runtime = Runtime(
             registry=self._registry,
             dependency_graph=self._graph,
+            container=self._container,
+            logger=self._container.resolve(
+                KernelLogger,
+            ),
+            events=self._events,
+        )
+
+        self._runtime_context = RuntimeContext(
+            runtime=self._runtime,
+            container=self._container,
+            logger=self._logger,
+            events=self._events,
+        )
+
+        self._container.register_instance(
+            RuntimeContext,
+            self._runtime_context,
+        )
+
+        self._container.register_instance(
+            KernelLogger,
+            self._logger,
         )
 
         self.register_service(
@@ -181,6 +212,22 @@ class KernelBootstrap:
         Shared kernel event bus.
         """
         return self._events
+
+    @property
+    def tracing(self) -> Tracing:
+        """
+        Shared runtime tracing service.
+        """
+        return self._tracing
+
+    @property
+    def runtime_context(
+        self,
+    ) -> RuntimeContext:
+        """
+        Shared runtime execution context.
+        """
+        return self._runtime_context
     
     @property
     def tool_service(
@@ -348,6 +395,12 @@ class KernelBootstrap:
             ),
             "workflow_service": (
                 self.workflow_service.diagnostics()
+            ),
+            "tracing": (
+                self.tracing.diagnostics()
+            ),
+            "runtime_context": (
+                self.runtime_context.diagnostics()
             ),
         }
         
