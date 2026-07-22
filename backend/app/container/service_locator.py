@@ -14,7 +14,8 @@ from __future__ import annotations
 from backend.app.container.container import Container
 from backend.core.config.config import EngineConfig
 from backend.core.services.tool_service import ToolService
-
+from backend.core.services.agent_service import AgentService
+from backend.core.services.workflow_service import WorkflowService
 
 class ServiceLocator:
     """
@@ -62,6 +63,29 @@ class ServiceLocator:
             ToolService,
         )
 
+    @property
+    def agents(
+        self,
+    ) -> AgentService:
+        """
+        Return the runtime agent service.
+        """
+        return self.container.resolve(
+            AgentService,
+        )
+
+
+    @property
+    def workflows(
+        self,
+    ) -> WorkflowService:
+        """
+        Return the runtime workflow service.
+        """
+        return self.container.resolve(
+            WorkflowService,
+        )
+
     # ------------------------------------------------------------------
     # Generic Resolution
     # ------------------------------------------------------------------
@@ -95,6 +119,12 @@ class ServiceLocator:
                 ).__name__,
                 "tools": type(
                     self.tools,
+                ).__name__,
+                "agents": type(
+                    self.agents,
+                ).__name__,
+                "workflows": type(
+                    self.workflows,
                 ).__name__,
             },
         }

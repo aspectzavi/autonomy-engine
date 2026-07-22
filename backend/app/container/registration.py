@@ -7,10 +7,14 @@ the lifetime rules for the created instance.
 
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from backend.app.container.lifetime import ServiceLifetime
 from backend.app.container.provider import Provider
+
+
+if TYPE_CHECKING:
+    from backend.app.container.container import Container
 
 
 T = TypeVar("T")
@@ -39,25 +43,34 @@ class ServiceRegistration(Generic[T]):
     # Resolution
     # ------------------------------------------------------------------
 
-    def resolve(self) -> T:
+    def resolve(
+        self,
+        container: Container,
+    ) -> T:
         """
         Resolve service according to lifetime.
         """
 
         if self.lifetime is ServiceLifetime.SINGLETON:
             if self._instance is None:
-                self._instance = self.provider.provide()
+                self._instance = self.provider.provide(
+                    container,
+                )
 
             return self._instance
 
         if self.lifetime is ServiceLifetime.TRANSIENT:
-            return self.provider.provide()
+            return self.provider.provide(
+                container,
+            )
 
         if self.lifetime is ServiceLifetime.SCOPED:
-            return self.provider.provide()
+            return self.provider.provide(
+                container,
+            )
 
         raise RuntimeError(
-            f"Unsupported service lifetime: {self.lifetime}"
+            f"Unsupported service lifetime: {self.lifetime}",
         )
 
     # ------------------------------------------------------------------
@@ -65,19 +78,27 @@ class ServiceRegistration(Generic[T]):
     # ------------------------------------------------------------------
 
     @property
-    def has_instance(self) -> bool:
+    def has_instance(
+        self,
+    ) -> bool:
         """
         Whether a singleton instance exists.
         """
+
         return self._instance is not None
 
-    def diagnostics(self) -> dict[str, Any]:
+    def diagnostics(
+        self,
+    ) -> dict[str, Any]:
         """
         Return registration diagnostics.
         """
+
         return {
             "service": self.service_type.__name__,
-            "provider": type(self.provider).__name__,
+            "provider": type(
+                self.provider,
+            ).__name__,
             "lifetime": self.lifetime.value,
             "initialized": self.has_instance,
         }

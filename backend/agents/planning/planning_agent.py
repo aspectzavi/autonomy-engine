@@ -11,8 +11,7 @@ from __future__ import annotations
 
 from backend.agents.planning.planner import RuleBasedAgentPlanner
 from backend.core.agents.agent import Agent
-from backend.core.workflows.executor import WorkflowExecutor
-
+from backend.core.services.workflow_service import WorkflowService
 
 class PlanningAgent(Agent):
     """
@@ -25,12 +24,12 @@ class PlanningAgent(Agent):
     def __init__(
         self,
         *,
-        workflow_executor: WorkflowExecutor | None = None,
+        workflow_service: WorkflowService,
     ) -> None:
         super().__init__(
             name="planning",
             planner=RuleBasedAgentPlanner(),
-            workflow_executor=workflow_executor,
+            workflow_service=workflow_service,
         )
 
     @property

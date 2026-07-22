@@ -12,7 +12,7 @@ from backend.core.agents.context import AgentContext
 from backend.core.agents.goal import Goal
 from backend.core.agents.result import AgentResult
 from backend.core.agents.state import AgentState
-from backend.core.workflows.executor import WorkflowExecutor
+from backend.core.services.workflow_service import WorkflowService
 from backend.core.agents.planner import AgentPlanner
 from backend.core.tasks.context import TaskContext
 
@@ -29,14 +29,11 @@ class Agent(ABC):
         *,
         name: str,
         planner: AgentPlanner,
-        workflow_executor: WorkflowExecutor | None = None,
+        workflow_service: WorkflowService,
     ) -> None:
         self._name = name
         self._planner = planner
-        self._workflow_executor = (
-            workflow_executor
-            or WorkflowExecutor()
-        )
+        self._workflow_service = workflow_service
         self._state = AgentState.IDLE
 
     # ------------------------------------------------------------------
@@ -58,11 +55,13 @@ class Agent(ABC):
         return self._planner
 
     @property
-    def workflow_executor(self) -> WorkflowExecutor:
+    def workflow_service(
+        self,
+    ) -> WorkflowService:
         """
-        Workflow executor.
+        Runtime workflow service.
         """
-        return self._workflow_executor
+        return self._workflow_service
 
     @property
     def state(self) -> AgentState:
@@ -98,7 +97,7 @@ class Agent(ABC):
             self._state = AgentState.EXECUTING
 
             
-            workflow_result = await self.workflow_executor.execute(
+            workflow_result = await self.workflow_service.execute(
                 workflow,
                 task_context,
             )
@@ -134,7 +133,7 @@ class Agent(ABC):
             "name": self.name,
             "state": self.state.value,
             "planner": type(self.planner).__name__,
-            "workflow_executor": (
-                type(self.workflow_executor).__name__
+            "workflow_service": (
+                type(self.workflow_service).__name__
             ),
         }

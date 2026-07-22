@@ -10,7 +10,7 @@ from backend.core.agents.manager import AgentManager
 from backend.core.agents.registry import AgentRegistry
 from backend.core.kernel.metadata import ServiceMetadata
 from backend.core.kernel.service import KernelService
-
+from backend.core.agents.agent import Agent
 
 class AgentService(KernelService):
     """
@@ -104,3 +104,37 @@ class AgentService(KernelService):
         )
 
         return diagnostics
+    
+    # ------------------------------------------------------------------
+    # Lookup
+    # ------------------------------------------------------------------
+
+    def get(
+        self,
+        name: str,
+    ) -> Agent:
+        """
+        Return a registered agent.
+        """
+        return self.manager.get(
+            name,
+        )
+
+    def contains(
+        self,
+        name: str,
+    ) -> bool:
+        """
+        Whether an agent is registered.
+        """
+        return self.manager.registry.contains(
+            name,
+        )
+
+    def agents(
+        self,
+    ) -> tuple[Agent, ...]:
+        """
+        Return all registered agents.
+        """
+        return self.manager.agents()
