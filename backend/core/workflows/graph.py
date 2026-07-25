@@ -7,10 +7,15 @@ Represents a directed acyclic graph (DAG) of workflow nodes.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterator
 
 from backend.core.workflows.edge import WorkflowEdge
 from backend.core.workflows.node import WorkflowNode
-
+from backend.core.workflows.exceptions import (
+    WorkflowCycleError,
+    WorkflowDependencyError,
+    WorkflowNodeError,
+)
 
 class WorkflowGraph:
     """
@@ -33,7 +38,7 @@ class WorkflowGraph:
         Add a node to the graph.
         """
         if node.id in self._nodes:
-            raise ValueError(
+            raise WorkflowNodeError(
                 f"Node '{node.id}' already exists."
             )
 
@@ -44,7 +49,7 @@ class WorkflowGraph:
         node_id: str,
     ) -> None:
         """
-        Remove a node and its connected edges.
+        Remove a node and all connected edges.
         """
         self._nodes.pop(node_id)
 
@@ -64,15 +69,33 @@ class WorkflowGraph:
     ) -> WorkflowNode:
         """
         Retrieve a node.
+
+        Raises:
+            KeyError if not found.
         """
         return self._nodes[node_id]
 
+    def get_node(
+        self,
+        node_id: str,
+    ) -> WorkflowNode | None:
+        """
+        Retrieve a node if present.
+        """
+        return self._nodes.get(
+            node_id,
+        )
+
     @property
-    def nodes(self) -> tuple[WorkflowNode, ...]:
+    def nodes(
+        self,
+    ) -> tuple[WorkflowNode, ...]:
         """
-        All workflow nodes.
+        Return all nodes.
         """
-        return tuple(self._nodes.values())
+        return tuple(
+            self._nodes.values(),
+        )
 
     # ------------------------------------------------------------------
     # Edge Management
@@ -86,30 +109,73 @@ class WorkflowGraph:
         Add a directed edge.
         """
         if edge.source not in self._nodes:
-            raise KeyError(edge.source)
+            raise WorkflowDependencyError(
+                f"Unknown dependency '{edge.source}'."
+            )
 
         if edge.target not in self._nodes:
-            raise KeyError(edge.target)
+            raise WorkflowDependencyError(
+                f"Unknown task '{edge.target}'."
+            )
 
-        self._edges.add(edge)
+        self._edges.add(
+            edge,
+        )
 
-        self._nodes[edge.target].add_dependency(
-            edge.source
+        self._nodes[
+            edge.target
+        ].add_dependency(
+            edge.source,
         )
 
     @property
-    def edges(self) -> tuple[WorkflowEdge, ...]:
+    def edges(
+        self,
+    ) -> tuple[WorkflowEdge, ...]:
         """
-        All workflow edges.
+        Return all edges.
         """
-        return tuple(self._edges)
+        return tuple(
+            self._edges,
+        )
 
     # ------------------------------------------------------------------
-    # Queries
+    # Graph Queries
     # ------------------------------------------------------------------
+
+    def dependencies(
+        self,
+        node_id: str,
+    ) -> tuple[WorkflowNode, ...]:
+        """
+        Return the nodes this node depends on.
+        """
+        node = self.node(
+            node_id,
+        )
+
+        return tuple(
+            self._nodes[dependency]
+            for dependency in node.depends_on
+        )
+
+    def dependents(
+        self,
+        node_id: str,
+    ) -> tuple[WorkflowNode, ...]:
+        """
+        Return nodes depending on the given node.
+        """
+        return tuple(
+            self._nodes[edge.target]
+            for edge in self._edges
+            if edge.source == node_id
+        )
 
     @property
-    def roots(self) -> tuple[WorkflowNode, ...]:
+    def roots(
+        self,
+    ) -> tuple[WorkflowNode, ...]:
         """
         Nodes with no dependencies.
         """
@@ -120,7 +186,9 @@ class WorkflowGraph:
         )
 
     @property
-    def leaves(self) -> tuple[WorkflowNode, ...]:
+    def leaves(
+        self,
+    ) -> tuple[WorkflowNode, ...]:
         """
         Nodes with no outgoing edges.
         """
@@ -135,17 +203,65 @@ class WorkflowGraph:
             if node.id not in sources
         )
 
+    def initial_nodes(
+        self,
+    ) -> tuple[WorkflowNode, ...]:
+        """
+        Initial executable nodes.
+        """
+        return self.roots
+
+    def ready_nodes(
+        self,
+        completed: set[str],
+    ) -> tuple[WorkflowNode, ...]:
+        """
+        Return nodes whose dependencies have all completed.
+        """
+        ready: list[WorkflowNode] = []
+
+        for node in self._nodes.values():
+
+            if node.id in completed:
+                continue
+
+            if all(
+                dependency in completed
+                for dependency in node.depends_on
+            ):
+                ready.append(
+                    node,
+                )
+
+        return tuple(
+            ready,
+        )
+
+    def is_complete(
+        self,
+        completed: set[str],
+    ) -> bool:
+        """
+        Return whether the workflow has completed.
+        """
+        return len(
+            completed,
+        ) == len(
+            self._nodes,
+        )
+
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 
-    def validate(self) -> None:
+    def validate(
+        self,
+    ) -> None:
         """
         Validate the graph.
 
         Raises:
-            ValueError:
-                If the graph contains a cycle.
+            ValueError if the graph contains a cycle.
         """
         self.topological_order()
 
@@ -158,13 +274,11 @@ class WorkflowGraph:
     ) -> tuple[WorkflowNode, ...]:
         """
         Return nodes in dependency order.
-
-        Raises:
-            ValueError:
-                If the graph contains a cycle.
         """
         in_degree = {
-            node.id: len(node.depends_on)
+            node.id: len(
+                node.depends_on,
+            )
             for node in self._nodes.values()
         }
 
@@ -174,35 +288,100 @@ class WorkflowGraph:
             if degree == 0
         )
 
-        ordered: list[WorkflowNode] = []
+        ordered: list[
+            WorkflowNode
+        ] = []
 
-        outgoing: dict[str, list[str]] = {}
+        outgoing: dict[
+            str,
+            list[str],
+        ] = {}
 
         for edge in self._edges:
             outgoing.setdefault(
                 edge.source,
                 [],
-            ).append(edge.target)
+            ).append(
+                edge.target,
+            )
 
         while queue:
+
             current = queue.popleft()
 
             ordered.append(
-                self._nodes[current]
+                self._nodes[current],
             )
 
-            for neighbour in outgoing.get(current, []):
-                in_degree[neighbour] -= 1
+            for neighbour in outgoing.get(
+                current,
+                [],
+            ):
+                in_degree[
+                    neighbour
+                ] -= 1
 
-                if in_degree[neighbour] == 0:
-                    queue.append(neighbour)
+                if (
+                    in_degree[
+                        neighbour
+                    ]
+                    == 0
+                ):
+                    queue.append(
+                        neighbour,
+                    )
 
-        if len(ordered) != len(self._nodes):
-            raise ValueError(
+        if len(
+            ordered,
+        ) != len(
+            self._nodes,
+        ):
+            raise WorkflowCycleError(
                 "Workflow graph contains a cycle."
             )
 
-        return tuple(ordered)
+        return tuple(
+            ordered,
+        )
+
+    # ------------------------------------------------------------------
+    # Python Helpers
+    # ------------------------------------------------------------------
+
+    def __contains__(
+        self,
+        node_id: object,
+    ) -> bool:
+        """
+        Return whether a node exists.
+        """
+        return (
+            isinstance(
+                node_id,
+                str,
+            )
+            and node_id in self._nodes
+        )
+
+    def __len__(
+        self,
+    ) -> int:
+        """
+        Number of nodes.
+        """
+        return len(
+            self._nodes,
+        )
+
+    def __iter__(
+        self,
+    ) -> Iterator[WorkflowNode]:
+        """
+        Iterate over workflow nodes.
+        """
+        return iter(
+            self._nodes.values(),
+        )
 
     # ------------------------------------------------------------------
     # Diagnostics
@@ -215,8 +394,12 @@ class WorkflowGraph:
         Graph diagnostics.
         """
         return {
-            "node_count": len(self._nodes),
-            "edge_count": len(self._edges),
+            "node_count": len(
+                self._nodes,
+            ),
+            "edge_count": len(
+                self._edges,
+            ),
             "roots": [
                 node.id
                 for node in self.roots

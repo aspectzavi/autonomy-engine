@@ -1,7 +1,8 @@
 """
 Workflow executor.
 
-Executes workflows using the existing task execution engine.
+Executes workflows using the workflow scheduler and task execution
+engine.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from backend.core.tasks.context import TaskContext
 from backend.core.tasks.executor import TaskExecutor
 from backend.core.tasks.result import TaskResult
 from backend.core.workflows.result import WorkflowResult
+from backend.core.workflows.scheduler import WorkflowScheduler
 from backend.core.workflows.workflow import Workflow
 
 
@@ -26,12 +28,22 @@ class WorkflowExecutor:
     ) -> None:
         self._task_executor = task_executor or TaskExecutor()
 
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
     @property
-    def task_executor(self) -> TaskExecutor:
+    def task_executor(
+        self,
+    ) -> TaskExecutor:
         """
         Underlying task executor.
         """
         return self._task_executor
+
+    # ------------------------------------------------------------------
+    # Execution
+    # ------------------------------------------------------------------
 
     async def execute(
         self,
@@ -40,41 +52,74 @@ class WorkflowExecutor:
     ) -> WorkflowResult:
         """
         Execute a workflow.
-
-        Tasks are executed in topological order.
         """
-        started_at = datetime.now(UTC)
+
+        started_at = datetime.now(
+            UTC,
+        )
 
         workflow.validate()
+
+        scheduler = WorkflowScheduler(
+            workflow,
+        )
 
         results: list[TaskResult] = []
 
         success = True
 
-        for node in workflow.graph.topological_order():
+        while scheduler.has_ready():
+
+            node = scheduler.next_node()
+
             result = await self.task_executor.execute(
                 node.task,
                 context,
             )
 
-            results.append(result)
+            results.append(
+                result,
+            )
 
             if result.failed:
                 success = False
                 break
 
+            scheduler.complete(
+                node.id,
+            )
+
         return WorkflowResult(
             workflow=workflow.name,
             success=success,
-            task_results=tuple(results),
+            task_results=tuple(
+                results,
+            ),
             started_at=started_at,
-            finished_at=datetime.now(UTC),
+            finished_at=datetime.now(
+                UTC,
+            ),
+            metadata={
+                "scheduler": scheduler.diagnostics(),
+            },
         )
 
-    def diagnostics(self) -> dict[str, object]:
+    # ------------------------------------------------------------------
+    # Diagnostics
+    # ------------------------------------------------------------------
+
+    def diagnostics(
+        self,
+    ) -> dict[str, object]:
         """
         Executor diagnostics.
         """
+
         return {
-            "task_executor": self.task_executor.__class__.__name__,
+            "task_executor": (
+                self.task_executor.__class__.__name__
+            ),
+            "scheduler": (
+                WorkflowScheduler.__name__
+            ),
         }

@@ -125,13 +125,20 @@ class Container:
         registrations are explicit composition-root overrides.
         """
 
-        self._registrations[service_type] = ServiceRegistration(
+        registration = ServiceRegistration(
             service_type=service_type,
             provider=InstanceProvider(
                 instance,
             ),
             lifetime=ServiceLifetime.SINGLETON,
         )
+
+        #
+        # The singleton already exists.
+        #
+        registration._instance = instance
+
+        self._registrations[service_type] = registration
 
     # ------------------------------------------------------------------
     # Resolution
