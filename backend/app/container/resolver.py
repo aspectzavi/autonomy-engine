@@ -57,14 +57,12 @@ class DependencyResolver:
         )
 
         try:
-            registration = (
-                self._container.registration(
-                    service_type,
-                )
+            registration = self._container.registration(
+                service_type,
             )
 
             if registration is not None:
-                return registration.provider.provide(
+                return registration.resolve(
                     self._container,
                 )
 
