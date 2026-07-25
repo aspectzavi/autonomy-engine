@@ -23,16 +23,21 @@ PlanValidator
 PlanCompiler
     │
     ▼
+CapabilityFactory
+    │
+    ▼
 Workflow
 """
 
 from __future__ import annotations
 
+from backend.core.capabilities.capability_factory import (
+    CapabilityFactory,
+)
 from backend.core.planning.execution_plan import ExecutionPlan
+from backend.core.planning.plan_step import PlanStep
 from backend.core.planning.plan_validator import PlanValidator
 from backend.core.tasks.task import Task
-from backend.core.planning.placeholder_task import PlaceholderTask
-from backend.core.planning.plan_step import PlanStep
 from backend.core.workflows.workflow import Workflow
 
 
@@ -44,8 +49,10 @@ class PlanCompiler:
     def __init__(
         self,
         *,
+        capability_factory: CapabilityFactory,
         validator: PlanValidator | None = None,
     ) -> None:
+        self._capability_factory = capability_factory
         self._validator = (
             validator
             or PlanValidator()
@@ -56,12 +63,23 @@ class PlanCompiler:
     # ------------------------------------------------------------------
 
     @property
+    def capability_factory(
+        self,
+    ) -> CapabilityFactory:
+        """
+        Capability factory.
+        """
+
+        return self._capability_factory
+
+    @property
     def validator(
         self,
     ) -> PlanValidator:
         """
         Plan validator.
         """
+
         return self._validator
 
     # ------------------------------------------------------------------
@@ -119,18 +137,13 @@ class PlanCompiler:
         step: PlanStep,
     ) -> Task:
         """
-        Convert a plan step into a workflow task.
-
-        This implementation intentionally creates a placeholder task.
-        Future planners will replace this with capability-aware task
-        construction.
+        Convert a plan step into an executable workflow task.
         """
 
-        return PlaceholderTask(
-            name=step.name,
-            description=step.description,
+        return self.capability_factory.create(
             capability=step.capability,
-            metadata=step.metadata,
+            task_name=step.name,
+            arguments=step.arguments,
         )
 
     # ------------------------------------------------------------------
@@ -147,5 +160,8 @@ class PlanCompiler:
         return {
             "validator": (
                 self.validator.__class__.__name__
+            ),
+            "capability_factory": (
+                self.capability_factory.__class__.__name__
             ),
         }
