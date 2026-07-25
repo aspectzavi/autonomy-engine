@@ -16,10 +16,6 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, slots=True)
 class PlanStep:
-    """
-    Immutable execution plan step.
-    """
-
     id: str
 
     name: str
@@ -27,6 +23,10 @@ class PlanStep:
     description: str
 
     capability: str
+
+    arguments: dict[str, object] = field(
+        default_factory=dict,
+    )
 
     depends_on: tuple[str, ...] = ()
 
@@ -95,6 +95,7 @@ class PlanStep:
             "name": self.name,
             "description": self.description,
             "capability": self.capability,
+            "arguments": self.arguments,
             "dependency_count": self.dependency_count,
             "depends_on": self.depends_on,
             "metadata": self.metadata,
