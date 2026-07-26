@@ -25,6 +25,11 @@ from backend.core.runtime.execution_session import (
 from backend.core.runtime.execution_state import (
     ExecutionState,
 )
+from backend.core.memory.memory_query import MemoryQuery
+from backend.core.services.memory_service import MemoryService
+from backend.core.runtime.execution_memory import (
+    ExecutionMemory,
+)
 
 
 class RuntimeCoordinator:
@@ -37,9 +42,11 @@ class RuntimeCoordinator:
         *,
         dispatcher: RuntimeDispatcher,
         runtime_context: RuntimeContext,
+        memory_service: MemoryService,
     ) -> None:
         self._dispatcher = dispatcher
         self._runtime_context = runtime_context
+        self._memory_service = memory_service
 
     # ------------------------------------------------------------------
     # Properties
@@ -63,6 +70,15 @@ class RuntimeCoordinator:
         """
         return self._runtime_context
 
+    @property
+    def memory_service(
+        self,
+    ) -> MemoryService:
+        """
+        Runtime memory service.
+        """
+        return self._memory_service
+
     # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
@@ -78,6 +94,8 @@ class RuntimeCoordinator:
         session = ExecutionSession(
             request=request,
         )
+
+        execution_memory = ExecutionMemory()
 
         session.record(
             "Execution created.",
@@ -107,21 +125,49 @@ class RuntimeCoordinator:
             )
 
             #
-            # Shared agent execution context.
+            # Retrieve relevant long-term memories.
+            #
+            memory_result = await self.memory_service.recall(
+                MemoryQuery(
+                    text=request.goal.description,
+                    limit=10,
+                ),
+            )
+
+            execution_memory.attach(
+                memory_result,
+            )
+
+            session.record(
+                (
+                    f"Retrieved "
+                    f"{len(memory_result.entries)} "
+                    "relevant memories."
+                ),
+            )
+
+            #
+            # Shared execution context.
             #
             agent_context = AgentContext(
                 event_bus=self.runtime_context.events,
                 runtime=self.runtime_context,
                 session=session,
-                memory=None,
+                memory=execution_memory,
             )
 
+            #
+            # Execute the selected agent.
+            #
             agent_result = await agent.execute(
                 goal=request.goal,
                 task_context=task_context,
                 context=agent_context,
             )
 
+            #
+            # Update execution state.
+            #
             if agent_result.success:
                 session.transition(
                     ExecutionState.COMPLETED,
@@ -138,6 +184,23 @@ class RuntimeCoordinator:
 
                 session.record(
                     "Execution failed.",
+                )
+
+            #
+            # Persist any memories generated during execution.
+            #
+            for entry in execution_memory.generated:
+                await self.memory_service.store(
+                    entry,
+                )
+
+            if execution_memory.generated:
+                session.record(
+                    (
+                        f"Stored "
+                        f"{len(execution_memory.generated)} "
+                        "new memories."
+                    ),
                 )
 
             return ExecutionResult(
@@ -206,5 +269,8 @@ class RuntimeCoordinator:
             ),
             "runtime_context": (
                 self.runtime_context.diagnostics()
+            ),
+            "memory_service": (
+                self.memory_service.diagnostics()
             ),
         }

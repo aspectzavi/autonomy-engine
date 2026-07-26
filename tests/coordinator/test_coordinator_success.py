@@ -9,10 +9,12 @@ from typing import cast
 from backend.app.container.container import Container
 from backend.core.kernel.runtime import Runtime
 from backend.core.kernel.runtime_context import RuntimeContext
+from backend.core.memory.memory_store import MemoryStore
 from backend.core.observability.events import EventBus
 from backend.core.observability.logger import KernelLogger
 from backend.core.runtime.coordinator import RuntimeCoordinator
 from backend.core.runtime.dispatcher import RuntimeDispatcher
+from backend.core.services.memory_service import MemoryService
 
 
 class DummyRuntime:
@@ -42,8 +44,8 @@ class DummyEvents:
 
 def test_runtime_coordinator_diagnostics() -> None:
     """
-    Coordinator diagnostics should expose
-    dispatcher and runtime context diagnostics.
+    Coordinator diagnostics should expose dispatcher,
+    runtime context and memory service diagnostics.
     """
 
     context = RuntimeContext(
@@ -53,9 +55,14 @@ def test_runtime_coordinator_diagnostics() -> None:
         events=cast(EventBus, DummyEvents()),
     )
 
+    memory_service = MemoryService(
+        provider=MemoryStore(),
+    )
+
     coordinator = RuntimeCoordinator(
         dispatcher=cast(RuntimeDispatcher, DummyDispatcher()),
         runtime_context=context,
+        memory_service=memory_service,
     )
 
     diagnostics = coordinator.diagnostics()
@@ -80,3 +87,4 @@ def test_runtime_coordinator_diagnostics() -> None:
     }
 
     assert "container" in runtime
+    assert "memory_service" in diagnostics
