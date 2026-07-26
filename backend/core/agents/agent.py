@@ -16,6 +16,9 @@ from backend.core.services.workflow_service import WorkflowService
 from backend.core.agents.planner import AgentPlanner
 from backend.core.tasks.context import TaskContext
 from backend.core.planning.plan_compiler import PlanCompiler
+from backend.core.memory.experience_recorder import (
+    ExperienceRecorder,
+)
 
 
 class Agent(ABC):
@@ -33,11 +36,13 @@ class Agent(ABC):
         planner: AgentPlanner,
         compiler: PlanCompiler,
         workflow_service: WorkflowService,
+        experience_recorder: ExperienceRecorder,
     ) -> None:
         self._name = name
         self._planner = planner
         self._compiler = compiler
         self._workflow_service = workflow_service
+        self._experience_recorder = experience_recorder
         self._state = AgentState.IDLE
 
     # ------------------------------------------------------------------
@@ -68,6 +73,15 @@ class Agent(ABC):
         return self._workflow_service
 
     @property
+    def experience_recorder(
+        self,
+    ) -> ExperienceRecorder:
+        """
+        Records execution experiences.
+        """
+        return self._experience_recorder
+
+    @property
     def state(self) -> AgentState:
         """
         Current agent state.
@@ -96,6 +110,7 @@ class Agent(ABC):
         """
         Execute a goal.
         """
+
         if context is None:
             raise ValueError(
                 "AgentContext must be provided by the runtime."
@@ -107,7 +122,8 @@ class Agent(ABC):
 
         try:
             plan = await self.planner.plan(
-                goal,
+                goal=goal,
+                context=context,
             )
 
             workflow = self.compiler.compile(
@@ -121,6 +137,17 @@ class Agent(ABC):
                 task_context,
             )
 
+            #
+            # Record successful execution.
+            #
+            if context.memory is not None:
+                context.memory.remember(
+                    self.experience_recorder.record_success(
+                        goal=goal.description,
+                        agent=self.name,
+                    ),
+                )
+
             self._state = AgentState.COMPLETED
 
             return AgentResult.ok(
@@ -131,6 +158,21 @@ class Agent(ABC):
             )
 
         except Exception as exc:
+            #
+            # Record failed execution.
+            #
+            if (
+                context is not None
+                and context.memory is not None
+            ):
+                context.memory.remember(
+                    self.experience_recorder.record_failure(
+                        goal=goal.description,
+                        agent=self.name,
+                        error=str(exc),
+                    ),
+                )
+
             self._state = AgentState.FAILED
 
             return AgentResult.failure(

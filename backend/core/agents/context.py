@@ -12,8 +12,8 @@ from dataclasses import field
 from typing import Any
 
 from backend.core.kernel.runtime_context import RuntimeContext
-from backend.core.memory.memory_result import MemoryResult
 from backend.core.observability.events import EventBus
+from backend.core.runtime.execution_memory import ExecutionMemory
 from backend.core.runtime.execution_session import ExecutionSession
 
 
@@ -33,9 +33,9 @@ class AgentContext:
     session: ExecutionSession | None = None
 
     #
-    # Retrieved memory relevant to the current goal.
+    # Working execution memory.
     #
-    memory: MemoryResult | None = None
+    memory: ExecutionMemory | None = None
 
     #
     # Arbitrary execution variables.
@@ -60,6 +60,9 @@ class AgentContext:
         key: str,
         default: Any = None,
     ) -> Any:
+        """
+        Retrieve a runtime variable.
+        """
         return self.variables.get(
             key,
             default,
@@ -70,12 +73,18 @@ class AgentContext:
         key: str,
         value: Any,
     ) -> None:
+        """
+        Store a runtime variable.
+        """
         self.variables[key] = value
 
     def update(
         self,
         **variables: Any,
     ) -> None:
+        """
+        Update multiple runtime variables.
+        """
         self.variables.update(
             variables,
         )
@@ -84,11 +93,17 @@ class AgentContext:
         self,
         key: str,
     ) -> bool:
+        """
+        Whether a runtime variable exists.
+        """
         return key in self.variables
 
     def clear(
         self,
     ) -> None:
+        """
+        Clear all runtime variables.
+        """
         self.variables.clear()
 
     # ------------------------------------------------------------------
@@ -98,6 +113,9 @@ class AgentContext:
     def diagnostics(
         self,
     ) -> dict[str, object]:
+        """
+        Return execution context diagnostics.
+        """
         return {
             "runtime_attached": (
                 self.runtime is not None
@@ -107,6 +125,11 @@ class AgentContext:
             ),
             "memory_attached": (
                 self.memory is not None
+            ),
+            "memory": (
+                None
+                if self.memory is None
+                else self.memory.diagnostics()
             ),
             "variable_count": (
                 len(self.variables)

@@ -13,22 +13,27 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 
+from backend.core.agents.context import AgentContext
 from backend.core.agents.goal import Goal
 from backend.core.planning.execution_plan import (
     ExecutionPlan,
 )
 
-
 class AgentPlanner(ABC):
-    """
-    Base interface for planners.
-    """
 
     @abstractmethod
     async def plan(
         self,
         goal: Goal,
+        context: AgentContext,
     ) -> ExecutionPlan:
         """
-        Produce an execution plan.
+        Produce an execution plan for the supplied goal.
+
+        The context provides runtime information such as:
+
+        - retrieved memories
+        - execution variables
+        - runtime services
+        - execution session
         """

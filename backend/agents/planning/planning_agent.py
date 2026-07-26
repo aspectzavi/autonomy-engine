@@ -11,8 +11,11 @@ from __future__ import annotations
 
 from backend.agents.planning.planner import RuleBasedAgentPlanner
 from backend.core.agents.agent import Agent
-from backend.core.services.workflow_service import WorkflowService
+from backend.core.memory.experience_recorder import (
+    ExperienceRecorder,
+)
 from backend.core.planning.plan_compiler import PlanCompiler
+from backend.core.services.workflow_service import WorkflowService
 
 
 class PlanningAgent(Agent):
@@ -28,12 +31,14 @@ class PlanningAgent(Agent):
         *,
         compiler: PlanCompiler,
         workflow_service: WorkflowService,
+        experience_recorder: ExperienceRecorder,
     ) -> None:
         super().__init__(
             name="planning",
             planner=RuleBasedAgentPlanner(),
             compiler=compiler,
             workflow_service=workflow_service,
+            experience_recorder=experience_recorder,
         )
 
     @property
@@ -46,7 +51,9 @@ class PlanningAgent(Agent):
             "for autonomous goals."
         )
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(
+        self,
+    ) -> dict[str, object]:
         """
         Return planning agent diagnostics.
         """
