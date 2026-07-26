@@ -76,15 +76,13 @@ class AgentRegistry:
     ) -> Agent:
         """
         Return a registered agent.
-
-        Raises:
-            KeyError:
-                If the agent is not registered.
         """
+
         try:
             return self._agents[name]
+
         except KeyError as exc:
-            raise KeyError(
+            raise AgentNotFoundError(
                 f"Agent '{name}' is not registered."
             ) from exc
 
@@ -111,7 +109,11 @@ class AgentRegistry:
         """
         Return registered agent names.
         """
-        return tuple(self._agents.keys())
+        return tuple(
+            sorted(
+                self._agents.keys(),
+            ),
+        )
 
     def clear(self) -> None:
         """

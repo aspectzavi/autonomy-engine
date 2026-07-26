@@ -3,47 +3,51 @@ Rule-based agent planner.
 
 Provides the default implementation of AgentPlanner.
 
-The planner performs simple deterministic planning by translating a
-high-level goal into an executable workflow. More sophisticated
-implementations (LLM, ReAct, Tree-of-Thought, etc.) can replace this
-planner without affecting the rest of the system.
+The planner performs deterministic planning by translating a high-level
+goal into an execution plan. Workflow construction is delegated to the
+planning subsystem's PlanCompiler.
 """
 
 from __future__ import annotations
 
 from backend.core.agents.goal import Goal
 from backend.core.agents.planner import AgentPlanner
-from backend.core.workflows.workflow import Workflow
+from backend.core.planning.execution_plan import ExecutionPlan
+from backend.core.planning.plan_step import PlanStep
 
 
 class RuleBasedAgentPlanner(AgentPlanner):
     """
     Default rule-based planner.
-
-    This planner creates an empty workflow whose structure will be
-    populated by future planning strategies.
     """
 
     async def plan(
         self,
         goal: Goal,
-    ) -> Workflow:
+    ) -> ExecutionPlan:
         """
-        Create an executable workflow for a goal.
+        Produce an execution plan for a goal.
         """
 
-        workflow = Workflow(
-            name=goal.description,
-        )
-
+        #
         # Future implementations will:
         #
         # - analyze the goal
+        # - invoke the reasoning subsystem
         # - decompose into subtasks
-        # - create workflow nodes
-        # - establish dependencies
-        # - validate the workflow
+        # - assign capabilities
+        # - determine dependencies
         #
-        # For now we simply return the workflow shell.
 
-        return workflow
+        return ExecutionPlan(
+            name=goal.description,
+            description=goal.description,
+            steps=(
+                PlanStep(
+                    id="goal",
+                    name=goal.description,
+                    description=goal.description,
+                    capability="goal.execute",
+                ),
+            ),
+        )

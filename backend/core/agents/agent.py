@@ -15,6 +15,8 @@ from backend.core.agents.state import AgentState
 from backend.core.services.workflow_service import WorkflowService
 from backend.core.agents.planner import AgentPlanner
 from backend.core.tasks.context import TaskContext
+from backend.core.planning.plan_compiler import PlanCompiler
+
 
 class Agent(ABC):
     """
@@ -29,10 +31,12 @@ class Agent(ABC):
         *,
         name: str,
         planner: AgentPlanner,
+        compiler: PlanCompiler,
         workflow_service: WorkflowService,
     ) -> None:
         self._name = name
         self._planner = planner
+        self._compiler = compiler
         self._workflow_service = workflow_service
         self._state = AgentState.IDLE
 
@@ -70,6 +74,15 @@ class Agent(ABC):
         """
         return self._state
 
+    @property
+    def compiler(
+        self,
+    ) -> PlanCompiler:
+        """
+        Execution plan compiler.
+        """
+        return self._compiler
+
     # ------------------------------------------------------------------
     # Execution
     # ------------------------------------------------------------------
@@ -83,20 +96,26 @@ class Agent(ABC):
         """
         Execute a goal.
         """
-        context = context or AgentContext()
+        if context is None:
+            raise ValueError(
+                "AgentContext must be provided by the runtime."
+            )
 
         self._state = AgentState.PLANNING
 
         started_at = goal.created_at
 
         try:
-            workflow = await self.planner.plan(
+            plan = await self.planner.plan(
                 goal,
+            )
+
+            workflow = self.compiler.compile(
+                plan,
             )
 
             self._state = AgentState.EXECUTING
 
-            
             workflow_result = await self.workflow_service.execute(
                 workflow,
                 task_context,
@@ -135,5 +154,8 @@ class Agent(ABC):
             "planner": type(self.planner).__name__,
             "workflow_service": (
                 type(self.workflow_service).__name__
+            ),
+            "compiler": (
+                type(self.compiler).__name__
             ),
         }
