@@ -1,88 +1,115 @@
 """
 Agent execution context.
 
-Provides the runtime context available to an autonomous agent while
-working toward a goal.
+Provides the shared execution context available to an autonomous agent
+during goal execution.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
+from backend.core.kernel.runtime_context import RuntimeContext
+from backend.core.memory.memory_result import MemoryResult
 from backend.core.observability.events import EventBus
+from backend.core.runtime.execution_session import ExecutionSession
 
 
 @dataclass(slots=True)
 class AgentContext:
     """
-    Runtime context shared across agent execution.
-
-    The context carries shared services and arbitrary execution data
-    throughout the agent lifecycle.
+    Shared runtime context for autonomous agents.
     """
 
-    event_bus: EventBus = field(
-        default_factory=EventBus,
-    )
+    #
+    # Shared runtime infrastructure
+    #
+    event_bus: EventBus
 
+    runtime: RuntimeContext | None = None
+
+    session: ExecutionSession | None = None
+
+    #
+    # Retrieved memory relevant to the current goal.
+    #
+    memory: MemoryResult | None = None
+
+    #
+    # Arbitrary execution variables.
+    #
     variables: dict[str, Any] = field(
         default_factory=dict,
     )
 
+    #
+    # Diagnostic metadata.
+    #
     metadata: dict[str, Any] = field(
         default_factory=dict,
     )
+
+    # ------------------------------------------------------------------
+    # Variables
+    # ------------------------------------------------------------------
 
     def get(
         self,
         key: str,
         default: Any = None,
     ) -> Any:
-        """
-        Retrieve a context variable.
-        """
-        return self.variables.get(key, default)
+        return self.variables.get(
+            key,
+            default,
+        )
 
     def set(
         self,
         key: str,
         value: Any,
     ) -> None:
-        """
-        Store a context variable.
-        """
         self.variables[key] = value
 
     def update(
         self,
         **variables: Any,
     ) -> None:
-        """
-        Update multiple variables.
-        """
-        self.variables.update(variables)
+        self.variables.update(
+            variables,
+        )
 
     def contains(
         self,
         key: str,
     ) -> bool:
-        """
-        Whether a variable exists.
-        """
         return key in self.variables
 
-    def clear(self) -> None:
-        """
-        Remove all runtime variables.
-        """
+    def clear(
+        self,
+    ) -> None:
         self.variables.clear()
 
-    def diagnostics(self) -> dict[str, object]:
-        """
-        Return context diagnostics.
-        """
+    # ------------------------------------------------------------------
+    # Diagnostics
+    # ------------------------------------------------------------------
+
+    def diagnostics(
+        self,
+    ) -> dict[str, object]:
         return {
-            "variable_count": len(self.variables),
+            "runtime_attached": (
+                self.runtime is not None
+            ),
+            "session_attached": (
+                self.session is not None
+            ),
+            "memory_attached": (
+                self.memory is not None
+            ),
+            "variable_count": (
+                len(self.variables)
+            ),
             "metadata": self.metadata,
         }

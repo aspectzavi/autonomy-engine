@@ -22,6 +22,9 @@ from typing import Any
 from backend.app.container.container import Container
 from backend.app.container.wiring import ContainerWiring
 from backend.app.container.agents import register_agents
+from backend.app.container.planning import (
+    register_planning,
+)
 
 from backend.core.kernel.dependency_graph import DependencyGraph
 from backend.core.kernel.registry import (
@@ -48,6 +51,7 @@ from backend.app.container.runtime_services import (
 from backend.core.kernel.runtime_context import (
     RuntimeContext,
 )
+
 
 
 class KernelBootstrap:
@@ -83,6 +87,11 @@ class KernelBootstrap:
             self._container,
         )
 
+        register_planning(
+            self._container,
+        )
+
+        
         self._container.register_instance(
             EngineConfig,
             self._config,

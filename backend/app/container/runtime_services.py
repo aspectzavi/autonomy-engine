@@ -21,6 +21,14 @@ from backend.core.runtime.execution_engine import ExecutionEngine
 from backend.core.runtime.execution_pipeline import ExecutionPipeline
 from backend.core.runtime.middleware_registry import MiddlewareRegistry
 from backend.core.observability.logger import KernelLogger
+from backend.core.services.memory_service import (
+    MemoryService,
+)
+
+from backend.core.memory.memory_store import (
+    MemoryStore,
+)
+
 
 def register_runtime_services(
     container: Container,
@@ -109,3 +117,22 @@ def register_runtime_services(
         container.register_singleton(
             ExecutionPipeline,
         )
+
+        #
+    # Memory infrastructure
+    #
+
+    if not container.contains(
+        MemoryStore,
+    ):
+        container.register_singleton(
+            MemoryStore,
+        )
+
+    if not container.contains(
+        MemoryService,
+    ):
+        container.register_singleton(
+            MemoryService,
+        )      
+

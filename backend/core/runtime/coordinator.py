@@ -11,6 +11,7 @@ planning or workflow execution itself.
 from __future__ import annotations
 
 from backend.core.agents.context import AgentContext
+from backend.core.kernel.runtime_context import RuntimeContext
 from backend.core.runtime.dispatcher import RuntimeDispatcher
 from backend.core.runtime.execution_request import (
     ExecutionRequest,
@@ -24,7 +25,6 @@ from backend.core.runtime.execution_session import (
 from backend.core.runtime.execution_state import (
     ExecutionState,
 )
-from backend.core.kernel.runtime_context import RuntimeContext
 
 
 class RuntimeCoordinator:
@@ -88,6 +88,9 @@ class RuntimeCoordinator:
                 ExecutionState.EXECUTING,
             )
 
+            #
+            # Select the appropriate agent.
+            #
             agent = self.dispatcher.dispatch(
                 request,
             )
@@ -96,14 +99,27 @@ class RuntimeCoordinator:
                 f"Selected agent '{agent.name}'.",
             )
 
+            #
+            # Create task execution context.
+            #
             task_context = (
                 self.runtime_context.task_context()
+            )
+
+            #
+            # Shared agent execution context.
+            #
+            agent_context = AgentContext(
+                event_bus=self.runtime_context.events,
+                runtime=self.runtime_context,
+                session=session,
+                memory=None,
             )
 
             agent_result = await agent.execute(
                 goal=request.goal,
                 task_context=task_context,
-                context=AgentContext(),
+                context=agent_context,
             )
 
             if agent_result.success:
@@ -166,9 +182,7 @@ class RuntimeCoordinator:
                     str(exc),
                 ),
                 metadata={
-                    "request_id": (
-                        request.request_id
-                    ),
+                    "request_id": request.request_id,
                     "events": tuple(
                         session.events,
                     ),
