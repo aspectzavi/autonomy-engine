@@ -15,6 +15,9 @@ from backend.core.kernel.runtime_context import RuntimeContext
 from backend.core.observability.events import EventBus
 from backend.core.runtime.execution_memory import ExecutionMemory
 from backend.core.runtime.execution_session import ExecutionSession
+from backend.core.services.memory_service import (
+    MemoryService,
+)
 
 
 @dataclass(slots=True)
@@ -31,6 +34,11 @@ class AgentContext:
     runtime: RuntimeContext | None = None
 
     session: ExecutionSession | None = None
+
+    #
+    # Runtime memory service.
+    #
+    memory_service: MemoryService | None = None
 
     #
     # Working execution memory.
@@ -123,6 +131,9 @@ class AgentContext:
             "session_attached": (
                 self.session is not None
             ),
+            "memory_service_attached": (
+                self.memory_service is not None
+            ),
             "memory_attached": (
                 self.memory is not None
             ),
@@ -135,4 +146,5 @@ class AgentContext:
                 len(self.variables)
             ),
             "metadata": self.metadata,
+            
         }

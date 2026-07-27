@@ -18,6 +18,10 @@ from backend.core.agents.goal import Goal
 from backend.core.planning.execution_plan import (
     ExecutionPlan,
 )
+from backend.core.reasoning.reasoning_result import (
+    ReasoningResult,
+)
+
 
 class AgentPlanner(ABC):
 
@@ -26,9 +30,13 @@ class AgentPlanner(ABC):
         self,
         goal: Goal,
         context: AgentContext,
+        reasoning: ReasoningResult,
     ) -> ExecutionPlan:
         """
         Produce an execution plan for the supplied goal.
+
+        The reasoning result represents the strategic decision that should
+        guide planning.
 
         The context provides runtime information such as:
 
