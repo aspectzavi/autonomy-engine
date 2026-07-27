@@ -18,6 +18,9 @@ from backend.core.memory.experience_recorder import (
     ExperienceRecorder,
 )
 from backend.core.planning.plan_compiler import PlanCompiler
+from backend.core.planning.plan_optimizer import (
+    PlanOptimizer,
+)
 from backend.core.reasoning.reasoning_result import (
     ReasoningResult,
 )
@@ -31,8 +34,8 @@ class Agent(ABC):
     """
     Base class for autonomous agents.
 
-    An agent coordinates reasoning, planning and execution while
-    delegating workflow creation and task execution to the workflow
+    An agent coordinates reasoning, planning, optimization and execution
+    while delegating workflow creation and task execution to the workflow
     subsystem.
     """
 
@@ -41,12 +44,14 @@ class Agent(ABC):
         *,
         name: str,
         planner: AgentPlanner,
+        optimizer: PlanOptimizer,
         compiler: PlanCompiler,
         workflow_service: WorkflowService,
         experience_recorder: ExperienceRecorder,
     ) -> None:
         self._name = name
         self._planner = planner
+        self._optimizer = optimizer
         self._compiler = compiler
         self._workflow_service = workflow_service
         self._experience_recorder = experience_recorder
@@ -75,6 +80,16 @@ class Agent(ABC):
         """
 
         return self._planner
+
+    @property
+    def optimizer(
+        self,
+    ) -> PlanOptimizer:
+        """
+        Execution plan optimizer.
+        """
+
+        return self._optimizer
 
     @property
     def workflow_service(
@@ -165,15 +180,24 @@ class Agent(ABC):
                 reasoning=reasoning,
             )
 
+            optimized_plan, optimization_report = (
+                await self.optimizer.optimize(
+                    plan=plan,
+                    context=context,
+                )
+            )
+
             workflow = self.compiler.compile(
-                plan,
+                optimized_plan,
             )
 
             self._state = AgentState.EXECUTING
 
-            workflow_result = await self.workflow_service.execute(
-                workflow,
-                task_context,
+            workflow_result = (
+                await self.workflow_service.execute(
+                    workflow,
+                    task_context,
+                )
             )
 
             if context.memory is not None:
@@ -191,6 +215,11 @@ class Agent(ABC):
                 goal=goal.description,
                 workflow_result=workflow_result,
                 started_at=started_at,
+                metadata={
+                    "optimization": (
+                        optimization_report.diagnostics()
+                    ),
+                },
             )
 
         except Exception as exc:
@@ -228,6 +257,9 @@ class Agent(ABC):
             "state": self.state.value,
             "planner": type(
                 self.planner,
+            ).__name__,
+            "optimizer": type(
+                self.optimizer,
             ).__name__,
             "workflow_service": type(
                 self.workflow_service,
