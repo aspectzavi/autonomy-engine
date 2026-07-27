@@ -7,26 +7,33 @@ Defines the base implementation for all autonomous agents.
 from __future__ import annotations
 
 from abc import ABC
+from abc import abstractmethod
 
 from backend.core.agents.context import AgentContext
 from backend.core.agents.goal import Goal
+from backend.core.agents.planner import AgentPlanner
 from backend.core.agents.result import AgentResult
 from backend.core.agents.state import AgentState
-from backend.core.services.workflow_service import WorkflowService
-from backend.core.agents.planner import AgentPlanner
-from backend.core.tasks.context import TaskContext
-from backend.core.planning.plan_compiler import PlanCompiler
 from backend.core.memory.experience_recorder import (
     ExperienceRecorder,
 )
+from backend.core.planning.plan_compiler import PlanCompiler
+from backend.core.reasoning.reasoning_result import (
+    ReasoningResult,
+)
+from backend.core.services.workflow_service import (
+    WorkflowService,
+)
+from backend.core.tasks.context import TaskContext
 
 
 class Agent(ABC):
     """
     Base class for autonomous agents.
 
-    An agent coordinates planning and execution but delegates workflow
-    creation and task execution to the workflow subsystem.
+    An agent coordinates reasoning, planning and execution while
+    delegating workflow creation and task execution to the workflow
+    subsystem.
     """
 
     def __init__(
@@ -50,17 +57,23 @@ class Agent(ABC):
     # ------------------------------------------------------------------
 
     @property
-    def name(self) -> str:
+    def name(
+        self,
+    ) -> str:
         """
         Agent name.
         """
+
         return self._name
 
     @property
-    def planner(self) -> AgentPlanner:
+    def planner(
+        self,
+    ) -> AgentPlanner:
         """
-        Workflow planner used by the agent.
+        Planner used by the agent.
         """
+
         return self._planner
 
     @property
@@ -70,6 +83,7 @@ class Agent(ABC):
         """
         Runtime workflow service.
         """
+
         return self._workflow_service
 
     @property
@@ -79,13 +93,17 @@ class Agent(ABC):
         """
         Records execution experiences.
         """
+
         return self._experience_recorder
 
     @property
-    def state(self) -> AgentState:
+    def state(
+        self,
+    ) -> AgentState:
         """
         Current agent state.
         """
+
         return self._state
 
     @property
@@ -95,7 +113,22 @@ class Agent(ABC):
         """
         Execution plan compiler.
         """
+
         return self._compiler
+
+    # ------------------------------------------------------------------
+    # Reasoning
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    async def reason(
+        self,
+        goal: Goal,
+        context: AgentContext,
+    ) -> ReasoningResult:
+        """
+        Execute the agent-specific reasoning stage.
+        """
 
     # ------------------------------------------------------------------
     # Execution
@@ -113,7 +146,7 @@ class Agent(ABC):
 
         if context is None:
             raise ValueError(
-                "AgentContext must be provided by the runtime."
+                "AgentContext must be provided by the runtime.",
             )
 
         self._state = AgentState.PLANNING
@@ -121,9 +154,15 @@ class Agent(ABC):
         started_at = goal.created_at
 
         try:
+            reasoning = await self.reason(
+                goal,
+                context,
+            )
+
             plan = await self.planner.plan(
                 goal=goal,
                 context=context,
+                reasoning=reasoning,
             )
 
             workflow = self.compiler.compile(
@@ -137,9 +176,6 @@ class Agent(ABC):
                 task_context,
             )
 
-            #
-            # Record successful execution.
-            #
             if context.memory is not None:
                 context.memory.remember(
                     self.experience_recorder.record_success(
@@ -158,13 +194,7 @@ class Agent(ABC):
             )
 
         except Exception as exc:
-            #
-            # Record failed execution.
-            #
-            if (
-                context is not None
-                and context.memory is not None
-            ):
+            if context.memory is not None:
                 context.memory.remember(
                     self.experience_recorder.record_failure(
                         goal=goal.description,
@@ -186,18 +216,23 @@ class Agent(ABC):
     # Diagnostics
     # ------------------------------------------------------------------
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(
+        self,
+    ) -> dict[str, object]:
         """
         Return agent diagnostics.
         """
+
         return {
             "name": self.name,
             "state": self.state.value,
-            "planner": type(self.planner).__name__,
-            "workflow_service": (
-                type(self.workflow_service).__name__
-            ),
-            "compiler": (
-                type(self.compiler).__name__
-            ),
+            "planner": type(
+                self.planner,
+            ).__name__,
+            "workflow_service": type(
+                self.workflow_service,
+            ).__name__,
+            "compiler": type(
+                self.compiler,
+            ).__name__,
         }

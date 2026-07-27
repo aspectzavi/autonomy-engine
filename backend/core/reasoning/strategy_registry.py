@@ -4,13 +4,15 @@ Strategy registry.
 Maintains the collection of reasoning strategies available to the
 reasoning engine.
 
-Strategies are registered under a unique name and may later be selected
-by configuration, heuristics, or policy.
+Reasoners are registered under a unique name and may later be selected
+by configuration, heuristics, or runtime policy.
 """
 
 from __future__ import annotations
 
-from backend.core.reasoning.strategy import Strategy
+from backend.core.reasoning.reasoner import (
+    Reasoner,
+)
 
 
 class StrategyRegistry:
@@ -21,7 +23,7 @@ class StrategyRegistry:
     def __init__(
         self,
     ) -> None:
-        self._strategies: dict[str, Strategy] = {}
+        self._strategies: dict[str, Reasoner] = {}
 
     # ------------------------------------------------------------------
     # Registration
@@ -31,7 +33,7 @@ class StrategyRegistry:
         self,
         *,
         name: str,
-        strategy: Strategy,
+        strategy: Reasoner,
     ) -> None:
         """
         Register a reasoning strategy.
@@ -59,7 +61,7 @@ class StrategyRegistry:
     def strategy(
         self,
         name: str,
-    ) -> Strategy:
+    ) -> Reasoner:
         """
         Resolve a reasoning strategy.
         """

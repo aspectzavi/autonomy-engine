@@ -3,17 +3,23 @@ Reasoning engine.
 
 Coordinates execution of the reasoning subsystem.
 
-The engine delegates reasoning requests to registered strategies.
+The engine is responsible for:
 
-Initially the engine selects the default heuristic strategy. Future
-implementations may dynamically select strategies based on the request,
-runtime policy, or available AI providers.
+- selecting a reasoning strategy
+- executing the selected reasoner
+- producing a ReasoningResult
+- exposing diagnostics
+
+Strategies remain independently replaceable.
 """
 
 from __future__ import annotations
 
 from backend.core.reasoning.heuristic_reasoner import (
     HeuristicReasoner,
+)
+from backend.core.reasoning.reasoner import (
+    Reasoner,
 )
 from backend.core.reasoning.reasoning_context import (
     ReasoningContext,
@@ -31,7 +37,7 @@ from backend.core.reasoning.strategy_registry import (
 
 class ReasoningEngine:
     """
-    Default reasoning engine.
+    Coordinates execution of the reasoning subsystem.
     """
 
     DEFAULT_STRATEGY = "heuristic"
@@ -43,7 +49,8 @@ class ReasoningEngine:
     ) -> None:
         self._registry = (
             registry
-            or StrategyRegistry()
+            if registry is not None
+            else StrategyRegistry()
         )
 
         if not self._registry.contains(
@@ -63,10 +70,29 @@ class ReasoningEngine:
         self,
     ) -> StrategyRegistry:
         """
-        Strategy registry.
+        Registered reasoning strategies.
         """
 
         return self._registry
+
+    # ------------------------------------------------------------------
+    # Strategy resolution
+    # ------------------------------------------------------------------
+
+    def strategy(
+        self,
+        name: str | None = None,
+    ) -> Reasoner:
+        """
+        Resolve a reasoning strategy.
+
+        If no strategy name is supplied, the default strategy is used.
+        """
+
+        return self.registry.strategy(
+            name
+            or self.DEFAULT_STRATEGY,
+        )
 
     # ------------------------------------------------------------------
     # Reasoning
@@ -76,18 +102,20 @@ class ReasoningEngine:
         self,
         request: ReasoningRequest,
         context: ReasoningContext,
+        *,
+        strategy: str | None = None,
     ) -> ReasoningResult:
         """
-        Execute reasoning.
+        Execute reasoning using the selected strategy.
         """
 
-        strategy = self.registry.strategy(
-            self.DEFAULT_STRATEGY,
+        reasoner = self.strategy(
+            strategy,
         )
 
-        return await strategy.reason(
-            request,
-            context,
+        return await reasoner.reason(
+            request=request,
+            context=context,
         )
 
     # ------------------------------------------------------------------
@@ -98,12 +126,15 @@ class ReasoningEngine:
         self,
     ) -> dict[str, object]:
         """
-        Engine diagnostics.
+        Return engine diagnostics.
         """
 
         return {
             "default_strategy": (
                 self.DEFAULT_STRATEGY
+            ),
+            "registered_strategies": (
+                self.registry.names
             ),
             "registry": (
                 self.registry.diagnostics()

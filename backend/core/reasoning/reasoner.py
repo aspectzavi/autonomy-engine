@@ -1,23 +1,30 @@
 """
-Reasoner.
+Reasoner interface.
 
-Public interface to the reasoning subsystem.
+Defines the contract implemented by all reasoning strategies.
 
-The Reasoner delegates reasoning requests to an underlying
-ReasoningEngine while presenting a stable API to the remainder of the
-autonomy engine.
+A Reasoner is responsible for transforming a ReasoningRequest and its
+ReasoningContext into a structured ReasoningResult.
 
-This mirrors the architecture used by other core subsystems such as
-Memory and Capabilities.
+Implementations may include:
+
+- heuristic reasoning
+- LLM-based reasoning
+- hybrid reasoning
+- tree-search reasoning
+- reflection-based reasoning
+
+The Reasoner interface intentionally contains no implementation details,
+allowing strategies to evolve independently of the reasoning engine.
 """
 
 from __future__ import annotations
 
+from abc import ABC
+from abc import abstractmethod
+
 from backend.core.reasoning.reasoning_context import (
     ReasoningContext,
-)
-from backend.core.reasoning.reasoning_engine import (
-    ReasoningEngine,
 )
 from backend.core.reasoning.reasoning_request import (
     ReasoningRequest,
@@ -27,52 +34,65 @@ from backend.core.reasoning.reasoning_result import (
 )
 
 
-class Reasoner:
+class Reasoner(ABC):
     """
-    High-level reasoning interface.
+    Base interface for all reasoning strategies.
     """
-
-    def __init__(
-        self,
-        *,
-        engine: ReasoningEngine | None = None,
-    ) -> None:
-        self._engine = (
-            engine
-            or ReasoningEngine()
-        )
 
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
 
     @property
-    def engine(
+    @abstractmethod
+    def name(
         self,
-    ) -> ReasoningEngine:
+    ) -> str:
         """
-        Underlying reasoning engine.
+        Human-readable strategy name.
         """
 
-        return self._engine
+    @property
+    def description(
+        self,
+    ) -> str:
+        """
+        Human-readable strategy description.
+        """
+
+        return self.__class__.__doc__ or ""
+
+    # ------------------------------------------------------------------
+    # Capability
+    # ------------------------------------------------------------------
+
+    def supports(
+        self,
+        request: ReasoningRequest,
+    ) -> bool:
+        """
+        Whether this reasoner can process the supplied request.
+
+        The default implementation accepts every request.
+        """
+
+        del request
+
+        return True
 
     # ------------------------------------------------------------------
     # Reasoning
     # ------------------------------------------------------------------
 
+    @abstractmethod
     async def reason(
         self,
         request: ReasoningRequest,
         context: ReasoningContext,
     ) -> ReasoningResult:
         """
-        Execute reasoning.
+        Execute reasoning and produce a structured result.
         """
-
-        return await self.engine.reason(
-            request,
-            context,
-        )
 
     # ------------------------------------------------------------------
     # Diagnostics
@@ -82,14 +102,11 @@ class Reasoner:
         self,
     ) -> dict[str, object]:
         """
-        Return diagnostics.
+        Return reasoner diagnostics.
         """
 
         return {
-            "engine": (
-                self.engine.__class__.__name__
-            ),
-            "engine_diagnostics": (
-                self.engine.diagnostics()
-            ),
+            "name": self.name,
+            "description": self.description,
+            "type": type(self).__name__,
         }

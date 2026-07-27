@@ -1,18 +1,27 @@
 """
 Heuristic reasoner.
 
-Provides the default reasoning strategy for the autonomy engine.
+Provides the default deterministic reasoning strategy.
 
-This implementation intentionally uses deterministic heuristics rather
-than an LLM. It forms the baseline reasoning capability and guarantees
-that the engine can operate without external AI services.
+This implementation intentionally performs no LLM reasoning. Instead it
+constructs a complete reasoning trace using simple deterministic
+heuristics.
 
-Future implementations may replace or augment this strategy with
-LLM-backed reasoning.
+Future LLM-based and hybrid reasoners should follow the same structure.
 """
 
 from __future__ import annotations
 
+from datetime import UTC
+from datetime import datetime
+
+from backend.core.reasoning.decision import Decision
+from backend.core.reasoning.decision_score import (
+    DecisionScorer,
+)
+from backend.core.reasoning.reasoner import (
+    Reasoner,
+)
 from backend.core.reasoning.reasoning_context import (
     ReasoningContext,
 )
@@ -22,15 +31,37 @@ from backend.core.reasoning.reasoning_request import (
 from backend.core.reasoning.reasoning_result import (
     ReasoningResult,
 )
-from backend.core.reasoning.strategy import (
-    Strategy,
+from backend.core.reasoning.reasoning_step import (
+    ReasoningStep,
+)
+from backend.core.reasoning.reasoning_trace import (
+    ReasoningTrace,
 )
 
 
-class HeuristicReasoner(Strategy):
+class HeuristicReasoner(Reasoner):
     """
-    Default heuristic reasoning strategy.
+    Default deterministic reasoning strategy.
     """
+
+    def __init__(
+        self,
+    ) -> None:
+        self._scorer = DecisionScorer()
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def name(
+        self,
+    ) -> str:
+        """
+        Strategy name.
+        """
+
+        return "heuristic"
 
     # ------------------------------------------------------------------
     # Reasoning
@@ -42,44 +73,93 @@ class HeuristicReasoner(Strategy):
         context: ReasoningContext,
     ) -> ReasoningResult:
         """
-        Produce a reasoning result using simple heuristics.
-
-        This implementation intentionally performs no AI reasoning.
-        It establishes the architecture upon which future reasoning
-        strategies will build.
+        Produce a deterministic reasoning result.
         """
 
-        strategy = "default"
+        trace = ReasoningTrace()
+
+        #
+        # Step 1
+        #
+        step = ReasoningStep(
+            name="Analyze request",
+            description=(
+                "Analyze the incoming reasoning request."
+            ),
+            operation="request.analysis",
+            success=True,
+            confidence=1.0,
+            observations=(
+                "Goal received.",
+            ),
+            started_at=datetime.now(
+                UTC,
+            ),
+            finished_at=datetime.now(
+                UTC,
+            ),
+        )
+
+        trace.add_step(
+            step,
+        )
 
         rationale = (
-            "Selected the default reasoning strategy "
-            "using deterministic heuristics."
+            "Selected the heuristic reasoning strategy."
         )
 
         if request.has_constraints:
             rationale += (
-                " Execution constraints were provided."
+                " Constraints were considered."
             )
 
         if request.has_context:
             rationale += (
-                " Runtime context was provided."
+                " Runtime context was available."
             )
+
+        score = self._scorer.score(
+            evidence_score=1.0,
+            strategy_score=1.0,
+            memory_score=0.75,
+        )
+
+        decision = Decision(
+            name="Default heuristic decision",
+            description=rationale,
+            outcome="proceed",
+            confidence=score.confidence,
+            evidence=(
+                "Deterministic heuristic strategy selected.",
+            ),
+            recommendations=(
+                "Proceed with planning.",
+            ),
+            metadata={
+                "reasoner": self.name,
+            },
+        )
+
+        trace.finish()
 
         context.events.publish(
             "reasoning.completed",
             {
                 "goal": request.goal,
-                "strategy": strategy,
+                "strategy": self.name,
+                "confidence": score.confidence,
             },
         )
 
         return ReasoningResult(
-            strategy=strategy,
-            confidence=1.0,
+            strategy=self.name,
+            decision=decision,
+            trace=trace,
+            confidence=score.confidence,
             rationale=rationale,
             metadata={
-                "reasoner": self.__class__.__name__,
+                "reasoner": type(self).__name__,
+                "score": score.diagnostics(),
             },
         )
 
@@ -95,6 +175,9 @@ class HeuristicReasoner(Strategy):
         """
 
         return {
-            "strategy": "heuristic",
+            "strategy": self.name,
             "llm": False,
+            "scorer": type(
+                self._scorer,
+            ).__name__,
         }
