@@ -3,13 +3,13 @@ Rule-based agent planner.
 
 Provides the default implementation of AgentPlanner.
 
-The planner performs deterministic planning by translating a high-level
-goal into an execution plan.
+The planner coordinates planning by combining runtime analysis with a
+planning policy.
 
-Planning is memory-aware and reasoning-aware.
+Reasoning determines *what* should be done.
 
-The ReasoningEngine is responsible for deciding *what* should be done,
-while the planner is responsible for determining *how* to execute it.
+The planning policy determines *how* the execution plan should be
+constructed.
 """
 
 from __future__ import annotations
@@ -21,7 +21,12 @@ from backend.core.planning.execution_plan import ExecutionPlan
 from backend.core.planning.memory_analyzer import (
     PlanningMemoryAnalyzer,
 )
-from backend.core.planning.plan_step import PlanStep
+from backend.core.planning.planning_policy import (
+    PlanningPolicy,
+)
+from backend.core.planning.rule_based_planning_policy import (
+    RuleBasedPlanningPolicy,
+)
 from backend.core.reasoning.reasoning_engine import (
     ReasoningEngine,
 )
@@ -40,11 +45,18 @@ class RuleBasedAgentPlanner(AgentPlanner):
         *,
         reasoning_engine: ReasoningEngine,
         analyzer: PlanningMemoryAnalyzer | None = None,
+        policy: PlanningPolicy | None = None,
     ) -> None:
         self._reasoning_engine = reasoning_engine
+
         self._analyzer = (
             analyzer
             or PlanningMemoryAnalyzer()
+        )
+
+        self._policy = (
+            policy
+            or RuleBasedPlanningPolicy()
         )
 
     # ------------------------------------------------------------------
@@ -71,6 +83,16 @@ class RuleBasedAgentPlanner(AgentPlanner):
 
         return self._analyzer
 
+    @property
+    def policy(
+        self,
+    ) -> PlanningPolicy:
+        """
+        Planning policy responsible for producing execution plans.
+        """
+
+        return self._policy
+
     # ------------------------------------------------------------------
     # Planning
     # ------------------------------------------------------------------
@@ -82,34 +104,48 @@ class RuleBasedAgentPlanner(AgentPlanner):
         reasoning: ReasoningResult,
     ) -> ExecutionPlan:
         """
-        Produce an execution plan for a goal.
+        Produce an execution plan.
 
-        The reasoning engine will be invoked in a subsequent
-        implementation step.
+        The planner performs runtime analysis before delegating plan
+        construction to the configured planning policy.
         """
 
         planning_insights = self.analyzer.analyze(
             context.memory,
         )
 
-        _ = planning_insights
-
-        return ExecutionPlan(
-            name=goal.description,
-            description=goal.description,
-            steps=(
-                PlanStep(
-                    id="goal",
-                    name=goal.description,
-                    description=goal.description,
-                    capability="goal.execute",
-                ),
-            ),
-            metadata={
-                "reasoning": {
-                    "strategy": reasoning.strategy,
-                    "decision": reasoning.decision.outcome,
-                    "confidence": reasoning.confidence,
-                },
-            },
+        return await self.policy.build_plan(
+            goal=goal,
+            context=context,
+            reasoning=reasoning,
+            insights=planning_insights,
         )
+
+    # ------------------------------------------------------------------
+    # Diagnostics
+    # ------------------------------------------------------------------
+
+    def diagnostics(
+        self,
+    ) -> dict[str, object]:
+        """
+        Return planner diagnostics.
+        """
+
+        return {
+            "reasoning_engine": (
+                type(
+                    self.reasoning_engine,
+                ).__name__
+            ),
+            "analyzer": (
+                type(
+                    self.analyzer,
+                ).__name__
+            ),
+            "policy": (
+                type(
+                    self.policy,
+                ).__name__
+            ),
+        }

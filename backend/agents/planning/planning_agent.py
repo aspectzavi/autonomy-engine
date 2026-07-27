@@ -7,9 +7,8 @@ The planning agent coordinates the translation of user goals into
 executable workflows using an AgentPlanner implementation.
 
 Unlike the generic Agent base class, the PlanningAgent owns the
-ReasoningEngine and ReasoningPipeline. The reasoning pipeline executes
-before planning, allowing the planner to focus solely on transforming
-reasoning decisions into execution plans.
+ReasoningEngine. Future versions execute the reasoning stage before
+planning while keeping the planner focused solely on plan generation.
 """
 
 from __future__ import annotations
@@ -18,13 +17,17 @@ from backend.agents.planning.planner import (
     RuleBasedAgentPlanner,
 )
 from backend.core.agents.agent import Agent
-from backend.core.agents.context import AgentContext
-from backend.core.agents.goal import Goal
 from backend.core.memory.experience_recorder import (
     ExperienceRecorder,
 )
 from backend.core.planning.plan_compiler import (
     PlanCompiler,
+)
+from backend.core.planning.plan_optimizer import (
+    PlanOptimizer,
+)
+from backend.core.planning.rule_based_plan_optimizer import (
+    RuleBasedPlanOptimizer,
 )
 from backend.core.reasoning.reasoning_engine import (
     ReasoningEngine,
@@ -38,14 +41,13 @@ from backend.core.reasoning.reasoning_result import (
 from backend.core.services.workflow_service import (
     WorkflowService,
 )
+from backend.core.agents.context import AgentContext
+from backend.core.agents.goal import Goal
 
 
 class PlanningAgent(Agent):
     """
     Default planning agent.
-
-    Uses the rule-based planner to translate goals into executable
-    workflows.
     """
 
     def __init__(
@@ -55,6 +57,7 @@ class PlanningAgent(Agent):
         workflow_service: WorkflowService,
         reasoning_engine: ReasoningEngine,
         experience_recorder: ExperienceRecorder,
+        optimizer: PlanOptimizer | None = None,
     ) -> None:
         self._reasoning_engine = reasoning_engine
 
@@ -69,6 +72,8 @@ class PlanningAgent(Agent):
         super().__init__(
             name="planning",
             planner=planner,
+            optimizer=optimizer
+            or RuleBasedPlanOptimizer(),
             compiler=compiler,
             workflow_service=workflow_service,
             experience_recorder=experience_recorder,
@@ -87,16 +92,6 @@ class PlanningAgent(Agent):
         """
 
         return self._reasoning_engine
-
-    @property
-    def reasoning_pipeline(
-        self,
-    ) -> ReasoningPipeline:
-        """
-        Pipeline responsible for orchestrating reasoning.
-        """
-
-        return self._reasoning_pipeline
 
     @property
     def description(
@@ -121,10 +116,10 @@ class PlanningAgent(Agent):
         context: AgentContext,
     ) -> ReasoningResult:
         """
-        Execute the planning reasoning pipeline.
+        Execute the reasoning pipeline.
         """
 
-        return await self.reasoning_pipeline.run(
+        return await self._reasoning_pipeline.run(
             goal=goal,
             context=context,
         )
@@ -148,12 +143,15 @@ class PlanningAgent(Agent):
                 "planner": type(
                     self.planner,
                 ).__name__,
+                "optimizer": type(
+                    self.optimizer,
+                ).__name__,
                 "reasoning_engine": type(
                     self.reasoning_engine,
                 ).__name__,
-                "reasoning_pipeline": type(
-                    self.reasoning_pipeline,
-                ).__name__,
+                "reasoning_pipeline": (
+                    self._reasoning_pipeline.diagnostics()
+                ),
             }
         )
 
