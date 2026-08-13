@@ -8,12 +8,9 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 144 passed, 0 failed
+- Tests: 155 passed, 0 failed
 - Ruff: PASS
-- Mypy (strict): PASS — 446 source files
-- **Note:** this entire Workflow Engine layer is uncommitted in git
-  as of this update (last commit predates it). Commit before further
-  work to avoid losing it.
+- Mypy (strict): PASS — 441 source files
 
 ---
 
@@ -56,32 +53,62 @@ Remaining
 
 Status
 
-85%
+95%
 
 Completed
 
 - Workflow / Graph / Nodes / Edges
 - WorkflowRuntimePipeline (orchestration: validate -> schedule ->
-  monitor -> resilience -> monitor.finish -> recovery -> report)
-- RuleBasedWorkflowScheduler (dependency-aware wave/batch scheduling,
-  upgraded from single-node sequential scheduling)
+  monitor -> resilience -> monitor.finish -> recovery -> report) —
+  now inherits WorkflowRuntime and is the LIVE registered runtime
+  (see "Critical fix" below)
+- RuleBasedWorkflowScheduler (dependency-aware wave/batch scheduling)
+- RuleBasedWorkflowExecutor (batch-parallel via asyncio.gather within
+  a scheduling group; groups still run in order)
 - DefaultWorkflowResilience (retry + failure classification, reuses
   a single SchedulingPlan across retries)
 - RetryPolicy / RuleBasedRetryPolicy (exponential backoff)
 - FailureClassifier / RuleBasedFailureClassifier
 - DefaultWorkflowRecovery (checkpoint-based)
-- WorkflowMonitor, WorkflowEventBus, WorkflowExecutionContext
+- DefaultWorkflowMonitor now opens a real ExecutionTrace/TraceSpan
+  through the shared Tracing service (previously only a disconnected
+  flat WorkflowTrace)
+- WorkflowRuntimePipeline logs through context.logger at every
+  lifecycle stage (started/scheduled/executed/recovery/finished)
+- WorkflowEventBus, WorkflowExecutionContext
 - Removed: orphaned legacy executor.py/scheduler.py/result.py trio
-  that duplicated class names with the real ABCs and was not wired
-  into anything
+  (duplicate class names, unused) and default_workflow_runtime.py
+  (superseded, see below)
+
+### Critical fix this session
+
+`WorkflowService` — the actual live service the rest of the system
+calls — was wired to `DefaultWorkflowRuntime`, a bare
+scheduler-then-executor runtime with **no monitoring, no resilience/
+retry, no recovery, and no event bus**. `WorkflowRuntimePipeline`
+(everything above) was fully built and fully tested but never
+actually ran in production. Fixed by:
+
+- Making `WorkflowRuntimePipeline` inherit `WorkflowRuntime`
+- Registering it (not `DefaultWorkflowRuntime`) as the container's
+  `WorkflowRuntime` implementation in `workflow_services.py`
+- Fixing `KernelBootstrap`: `Tracing` was constructed but never
+  registered in the container, and was registered too late (after
+  `WorkflowService` had already resolved) — moved earlier
+- Deleting `default_workflow_runtime.py` (no longer referenced
+  anywhere)
+- `WorkflowService`'s standalone fallback (used when constructed
+  outside the DI container, e.g. in isolated tests) now builds a
+  fully wired `WorkflowRuntimePipeline` instead of the old bare
+  runtime, so that path is never quietly weaker than the DI path
 
 Remaining
 
 - Checkpoint replay / partial recovery / resumption
 - Circuit breakers, adaptive retry, timeout/cancellation policies
-- Parallel execution of a scheduling group's nodes at the executor
-  level (scheduler now produces parallel-safe groups; executor still
-  needs to run a group concurrently rather than sequentially)
+- Event bus has zero subscribers (WorkflowEventHistory /
+  WorkflowEventListener exist but nothing subscribes them — would
+  need an async wiring point, e.g. WorkflowService.on_start())
 
 ---
 ## Tasks

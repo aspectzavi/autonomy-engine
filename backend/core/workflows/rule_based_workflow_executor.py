@@ -6,16 +6,21 @@ Default implementation of WorkflowExecutor.
 The executor walks the SchedulingPlan in order and executes every task
 contained within each SchedulingGroup.
 
-Current implementation executes tasks sequentially.
-
-Future implementations may execute tasks inside a scheduling group
-concurrently.
+Tasks within a single SchedulingGroup carry no dependency on one
+another (the scheduler guarantees this), so they are executed
+concurrently via asyncio.gather. Groups themselves are still executed
+in order, since a later group may depend on an earlier one.
 """
 
 from __future__ import annotations
 
+import asyncio
+
 from backend.core.tasks.context import (
     TaskContext,
+)
+from backend.core.tasks.result import (
+    TaskResult,
 )
 from backend.core.workflows.execution_batch import (
     ExecutionBatch,
@@ -65,7 +70,8 @@ class RuleBasedWorkflowExecutor(
         }
 
         #
-        # Execute scheduling groups in order.
+        # Execute scheduling groups in order. Groups may depend on
+        # earlier groups, so groups themselves run sequentially.
         #
         for order, group in enumerate(
             schedule.groups,
@@ -75,12 +81,29 @@ class RuleBasedWorkflowExecutor(
                 order=order,
             )
 
-            for task_id in batch.task_ids:
-                node = nodes[task_id]
+            #
+            # Tasks within a batch have no dependency on one another
+            # (guaranteed by the scheduler), so they run concurrently.
+            #
+            results = await asyncio.gather(
+                *(
+                    nodes[task_id].task.execute(
+                        context,
+                    )
+                    for task_id in batch.task_ids
+                ),
+                return_exceptions=True,
+            )
 
-                result = await node.task.execute(
-                    context,
-                )
+            for outcome in results:
+                if isinstance(
+                    outcome,
+                    BaseException,
+                ):
+                    failed_tasks += 1
+                    continue
+
+                result: TaskResult = outcome
 
                 if result.success:
                     completed_tasks += 1
@@ -99,7 +122,7 @@ class RuleBasedWorkflowExecutor(
                     self.__class__.__name__
                 ),
                 "strategy": (
-                    "sequential"
+                    "batch_parallel"
                 ),
             },
         )
@@ -120,7 +143,7 @@ class RuleBasedWorkflowExecutor(
         diagnostics.update(
             {
                 "strategy": "rule-based",
-                "parallel_execution": False,
+                "parallel_execution": True,
             }
         )
 

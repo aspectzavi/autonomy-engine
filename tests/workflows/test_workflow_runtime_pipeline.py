@@ -9,6 +9,7 @@ business behavior to its injected components.
 
 from __future__ import annotations
 
+import logging
 from typing import cast
 from unittest.mock import AsyncMock
 from unittest.mock import Mock
@@ -1234,6 +1235,7 @@ def test_pipeline_diagnostics() -> None:
     diagnostics = pipeline.diagnostics()
 
     assert diagnostics == {
+        "runtime": "WorkflowRuntimePipeline",
         "pipeline": "WorkflowRuntimePipeline",
         "scheduler": type(
             scheduler,
@@ -1272,3 +1274,50 @@ def test_workflow_execution_context_is_available() -> None:
 
     assert context.workflow is workflow
     assert context.task_context is task_context
+
+# ---------------------------------------------------------------------------
+# Structured logging
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_pipeline_emits_structured_lifecycle_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    The pipeline logs through context.logger at each lifecycle stage,
+    so workflow runs are visible outside the returned RuntimeReport.
+    """
+
+    (
+        pipeline,
+        *_rest,
+    ) = create_pipeline()
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="backend.core.workflows.workflow_runtime_pipeline",
+    ):
+        await pipeline.execute(
+            workflow=create_workflow(),
+            context=create_task_context(),
+        )
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+    ]
+
+    assert any(
+        "started" in message
+        for message in messages
+    )
+
+    assert any(
+        "scheduled" in message
+        for message in messages
+    )
+
+    assert any(
+        "finished" in message
+        for message in messages
+    )

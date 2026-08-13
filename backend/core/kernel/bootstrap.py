@@ -83,6 +83,16 @@ class KernelBootstrap:
 
         self._container = Container()
 
+        self._container.register_instance(
+            KernelLogger,
+            self._logger,
+        )
+
+        self._container.register_instance(
+            Tracing,
+            self._tracing,
+        )
+
         register_runtime_services(
             self._container,
         )
