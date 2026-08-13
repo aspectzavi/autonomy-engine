@@ -1,0 +1,135 @@
+"""
+Kernel service registration.
+
+Registers runtime-managed services into the dependency injection
+container.
+"""
+
+from __future__ import annotations
+
+from backend.app.container.container import Container
+
+from backend.core.memory.memory_store import (
+    MemoryStore,
+)
+from backend.core.observability.events import (
+    EventBus,
+)
+from backend.core.observability.logger import (
+    KernelLogger,
+)
+from backend.core.observability.tracing import (
+    Tracing,
+)
+from backend.core.runtime.execution_engine import (
+    ExecutionEngine,
+)
+from backend.core.runtime.execution_pipeline import (
+    ExecutionPipeline,
+)
+from backend.core.services.agent_service import (
+    AgentService,
+)
+from backend.core.services.memory_service import (
+    MemoryService,
+)
+from backend.core.services.tool_service import (
+    ToolService,
+)
+from backend.core.services.workflow_service import (
+    WorkflowService,
+)
+
+
+def register_runtime_services(
+    container: Container,
+) -> None:
+    """
+    Register runtime-managed services.
+    """
+
+    # ------------------------------------------------------------------
+    # Core application services
+    # ------------------------------------------------------------------
+
+    if not container.contains(
+        ToolService,
+    ):
+        container.register_singleton(
+            ToolService,
+        )
+
+    if not container.contains(
+        AgentService,
+    ):
+        container.register_singleton(
+            AgentService,
+        )
+
+    if not container.contains(
+        WorkflowService,
+    ):
+        container.register_singleton(
+            WorkflowService,
+        )
+
+    # ------------------------------------------------------------------
+    # Observability
+    # ------------------------------------------------------------------
+
+    if not container.contains(
+        EventBus,
+    ):
+        container.register_singleton(
+            EventBus,
+        )
+
+    if not container.contains(
+        Tracing,
+    ):
+        container.register_singleton(
+            Tracing,
+        )
+
+    if not container.contains(
+        KernelLogger,
+    ):
+        container.register_singleton(
+            KernelLogger,
+        )
+
+    # ------------------------------------------------------------------
+    # Runtime
+    # ------------------------------------------------------------------
+
+    if not container.contains(
+        ExecutionEngine,
+    ):
+        container.register_singleton(
+            ExecutionEngine,
+        )
+
+    if not container.contains(
+        ExecutionPipeline,
+    ):
+        container.register_singleton(
+            ExecutionPipeline,
+        )
+
+    # ------------------------------------------------------------------
+    # Memory
+    # ------------------------------------------------------------------
+
+    if not container.contains(
+        MemoryStore,
+    ):
+        container.register_singleton(
+            MemoryStore,
+        )
+
+    if not container.contains(
+        MemoryService,
+    ):
+        container.register_singleton(
+            MemoryService,
+        )
