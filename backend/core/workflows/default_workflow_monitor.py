@@ -4,7 +4,11 @@ Default workflow monitor.
 Production-ready implementation of WorkflowMonitor.
 
 The default monitor collects execution metrics and execution traces for
-a workflow without affecting execution.
+a workflow without affecting execution. It also opens a real
+observability span through the shared Tracing service, so a workflow
+execution is visible alongside every other traced operation in the
+system (agents, tools, planning) rather than only inside its own
+isolated WorkflowTrace record.
 
 Future implementations may integrate with:
 
@@ -17,6 +21,15 @@ Future implementations may integrate with:
 
 from __future__ import annotations
 
+from backend.core.observability.execution_trace import (
+    ExecutionTrace,
+)
+from backend.core.observability.trace_span import (
+    TraceSpan,
+)
+from backend.core.observability.tracing import (
+    Tracing,
+)
 from backend.core.workflows.execution_result import (
     ExecutionResult,
 )
@@ -43,10 +56,18 @@ class DefaultWorkflowMonitor(
 
     def __init__(
         self,
+        *,
+        tracing: Tracing,
     ) -> None:
+        self._tracing = tracing
+
         self._metrics = WorkflowMetrics()
 
         self._trace = WorkflowTrace()
+
+        self._execution_trace: ExecutionTrace | None = None
+
+        self._root_span: TraceSpan | None = None
 
     # ------------------------------------------------------------------
     # Properties
@@ -72,6 +93,17 @@ class DefaultWorkflowMonitor(
 
         return self._trace
 
+    @property
+    def execution_trace(
+        self,
+    ) -> ExecutionTrace | None:
+        """
+        Shared observability trace opened for this workflow run, if
+        monitoring has begun.
+        """
+
+        return self._execution_trace
+
     # ------------------------------------------------------------------
     # Monitoring
     # ------------------------------------------------------------------
@@ -87,6 +119,19 @@ class DefaultWorkflowMonitor(
 
         self._trace = WorkflowTrace.start(
             workflow=workflow.name,
+        )
+
+        self._execution_trace = (
+            self._tracing.create_trace()
+        )
+
+        self._root_span = (
+            self._execution_trace.start_span(
+                f"workflow.{workflow.name}",
+                metadata={
+                    "workflow": workflow.name,
+                },
+            )
         )
 
     async def finish(
@@ -111,6 +156,29 @@ class DefaultWorkflowMonitor(
         self._trace = self._trace.finish(
             successful=result.success,
         )
+
+        if self._root_span is not None:
+            self._root_span.set_metadata(
+                "completed_batches",
+                result.completed_batches,
+            )
+
+            self._root_span.set_metadata(
+                "completed_tasks",
+                result.completed_tasks,
+            )
+
+            self._root_span.set_metadata(
+                "failed_tasks",
+                result.failed_tasks,
+            )
+
+            if result.success:
+                self._root_span.finish()
+            else:
+                self._root_span.fail(
+                    f"{result.failed_tasks} task(s) failed",
+                )
 
     # ------------------------------------------------------------------
     # Accessors
@@ -154,6 +222,11 @@ class DefaultWorkflowMonitor(
                 ),
                 "trace": (
                     self.current_trace.diagnostics()
+                ),
+                "execution_trace_id": (
+                    self._execution_trace.trace_id
+                    if self._execution_trace is not None
+                    else None
                 ),
             },
         )

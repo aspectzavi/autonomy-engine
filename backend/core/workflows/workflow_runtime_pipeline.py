@@ -58,6 +58,7 @@ from backend.core.workflows.workflow_recovery import WorkflowRecovery
 from backend.core.workflows.workflow_resilience import (
     WorkflowResilience,
 )
+from backend.core.workflows.workflow_runtime import WorkflowRuntime
 from backend.core.workflows.workflow_scheduler import WorkflowScheduler
 
 
@@ -66,7 +67,9 @@ __all__ = [
 ]
 
 
-class WorkflowRuntimePipeline:
+class WorkflowRuntimePipeline(
+    WorkflowRuntime,
+):
     """
     Coordinates workflow runtime execution.
 
@@ -164,6 +167,15 @@ class WorkflowRuntimePipeline:
             task_context=context,
         )
 
+        logger = context.logger.get(
+            __name__,
+        )
+
+        logger.info(
+            "workflow '%s' started",
+            workflow.name,
+        )
+
         # --------------------------------------------------------------
         # Workflow started
         # --------------------------------------------------------------
@@ -196,6 +208,11 @@ class WorkflowRuntimePipeline:
 
         runtime.publish(
             "workflow.scheduled",
+        )
+
+        logger.info(
+            "workflow '%s' scheduled",
+            workflow.name,
         )
 
         await self.event_bus.publish(
@@ -243,6 +260,23 @@ class WorkflowRuntimePipeline:
             "workflow.executed",
         )
 
+        if resilience_report.successful:
+            logger.info(
+                "workflow '%s' executed "
+                "(retries_performed=%s)",
+                workflow.name,
+                resilience_report.retries_performed,
+            )
+        else:
+            logger.warning(
+                "workflow '%s' execution reported "
+                "failures (failure_classification=%s, "
+                "retries_performed=%s)",
+                workflow.name,
+                resilience_report.failure_classification,
+                resilience_report.retries_performed,
+            )
+
         # --------------------------------------------------------------
         # Monitoring finishes after execution
         # --------------------------------------------------------------
@@ -287,6 +321,11 @@ class WorkflowRuntimePipeline:
             "workflow.recovery.completed",
         )
 
+        logger.info(
+            "workflow '%s' recovery phase completed",
+            workflow.name,
+        )
+
         # --------------------------------------------------------------
         # Workflow finished
         # --------------------------------------------------------------
@@ -300,6 +339,11 @@ class WorkflowRuntimePipeline:
 
         runtime.publish(
             "workflow.finished",
+        )
+
+        logger.info(
+            "workflow '%s' finished",
+            workflow.name,
         )
 
         # --------------------------------------------------------------
@@ -333,21 +377,27 @@ class WorkflowRuntimePipeline:
         Return pipeline diagnostics.
         """
 
-        return {
-            "pipeline": type(self).__name__,
-            "scheduler": type(
-                self.scheduler,
-            ).__name__,
-            "monitor": type(
-                self.monitor,
-            ).__name__,
-            "recovery": type(
-                self.recovery,
-            ).__name__,
-            "resilience": type(
-                self.resilience,
-            ).__name__,
-            "event_bus": type(
-                self.event_bus,
-            ).__name__,
-        }
+        diagnostics = super().diagnostics()
+
+        diagnostics.update(
+            {
+                "pipeline": type(self).__name__,
+                "scheduler": type(
+                    self.scheduler,
+                ).__name__,
+                "monitor": type(
+                    self.monitor,
+                ).__name__,
+                "recovery": type(
+                    self.recovery,
+                ).__name__,
+                "resilience": type(
+                    self.resilience,
+                ).__name__,
+                "event_bus": type(
+                    self.event_bus,
+                ).__name__,
+            }
+        )
+
+        return diagnostics

@@ -23,8 +23,8 @@ from backend.core.services.workflow_service import WorkflowService
 from backend.core.workflows.workflow_runtime import (
     WorkflowRuntime,
 )
-from backend.core.workflows.default_workflow_runtime import (
-    DefaultWorkflowRuntime,
+from backend.core.workflows.workflow_runtime_pipeline import (
+    WorkflowRuntimePipeline,
 )
 
 from backend.core.workflows.workflow_scheduler import (
@@ -210,6 +210,10 @@ def register_workflow_services(
 
     # ------------------------------------------------------------------
     # Runtime
+    #
+    # WorkflowRuntimePipeline is the production runtime: it wires
+    # scheduling through monitoring, resilience (retry + failure
+    # classification), recovery, and the event bus.
     # ------------------------------------------------------------------
 
     if not container.contains(
@@ -220,7 +224,7 @@ def register_workflow_services(
                 type[Any],
                 WorkflowRuntime,
             ),
-            implementation=DefaultWorkflowRuntime,
+            implementation=WorkflowRuntimePipeline,
         )
 
     # ------------------------------------------------------------------
