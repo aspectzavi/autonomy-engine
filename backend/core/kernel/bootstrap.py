@@ -22,6 +22,9 @@ from typing import Any
 from backend.app.container.container import Container
 from backend.app.container.wiring import ContainerWiring
 from backend.app.container.agents import register_agents
+from backend.app.container.agent_factory import (
+    create_agent_factory,
+)
 from backend.app.container.planning import (
     register_planning,
 )
@@ -101,7 +104,23 @@ class KernelBootstrap:
             self._container,
         )
 
-        
+        #
+        # Register agent infrastructure (AgentRegistry, AgentManager,
+        # built-in agent types) and construct/register the built-in
+        # agents (e.g. PlanningAgent) BEFORE AgentService is resolved
+        # below. Resolving AgentService first would let it auto-
+        # construct its own private, disconnected AgentManager with
+        # zero registered agents, since AgentManager would not yet be
+        # registered as a container singleton at that point.
+        #
+        register_agents(
+            self._container,
+        )
+
+        create_agent_factory(
+            self._container,
+        )
+
         self._container.register_instance(
             EngineConfig,
             self._config,
