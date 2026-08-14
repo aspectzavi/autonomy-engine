@@ -106,6 +106,15 @@ def test_register_agents() -> None:
     )
 
     #
+    # Regression: AgentManager must be wired to the SAME
+    # AgentRegistry singleton, not a disconnected instance created
+    # by a falsy-empty-collection fallback (`registry or
+    # AgentRegistry()`, which discards an empty-but-valid injected
+    # registry since AgentRegistry defines __len__).
+    #
+    assert manager.registry is registry
+
+    #
     # PlanningAgent is transient.
     #
     assert (

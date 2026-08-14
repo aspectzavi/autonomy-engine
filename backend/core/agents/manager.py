@@ -26,7 +26,18 @@ class AgentManager:
         self,
         registry: AgentRegistry | None = None,
     ) -> None:
-        self._registry = registry or AgentRegistry()
+        #
+        # NOTE: must be `is None`, not `registry or AgentRegistry()`.
+        # AgentRegistry defines __len__, so an injected-but-empty
+        # registry (0 agents registered yet) evaluates as falsy and
+        # would be silently discarded by `or`, replaced with a new,
+        # disconnected registry instance.
+        #
+        self._registry = (
+            registry
+            if registry is not None
+            else AgentRegistry()
+        )
 
     # ------------------------------------------------------------------
     # Properties

@@ -8,7 +8,7 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 155 passed, 0 failed
+- Tests: 160 passed, 0 failed
 - Ruff: PASS
 - Mypy (strict): PASS — 441 source files
 
@@ -123,7 +123,63 @@ Status
 
 Status
 
-45%
+55%
+
+Completed
+
+- Agent base class (reason -> plan -> optimize -> compile -> execute,
+  state transitions, experience recording on success/failure)
+- AgentRegistry, AgentManager, AgentFactory
+- PlanningAgent (concrete built-in agent) + RuleBasedAgentPlanner
+- AgentContext, Goal, AgentResult, AgentState
+- Verified end-to-end: bootstrap -> agent_service -> manager.execute()
+  -> reasoning pipeline -> planning -> optimization -> compilation ->
+  workflow execution now genuinely runs (previously did not, see
+  critical fix below)
+- tests/agents/, tests/bootstrap/ now have real coverage (both were
+  empty stub files before this session — zero lines of test code
+  existed for the composition root or for AgentManager)
+
+### Critical fix this session
+
+`AgentService` — the live service everything calls — booted with
+**zero registered agents**, every time, silently. Root causes (two
+separate bugs, both in the same class as the earlier WorkflowRuntime
+fix):
+
+1. `KernelBootstrap.__init__` resolved `AgentService` before
+   `register_agents()` / `create_agent_factory()` ever ran, so
+   `AgentService` auto-constructed its own private, disconnected,
+   empty `AgentManager`. Fixed by moving agent registration +
+   built-in agent construction before `AgentService` is resolved.
+2. Even after fixing (1), agents still didn't show up:
+   `AgentManager.__init__` used `registry or AgentRegistry()`.
+   `AgentRegistry` defines `__len__`, so an injected-but-*empty*
+   registry evaluates as falsy in Python and was silently discarded
+   in favor of a brand-new, disconnected registry — even though DI
+   had correctly injected the right (shared, singleton) one. Fixed
+   by switching to an explicit `is None` check. Found the identical
+   latent bug in `ToolManager` (currently harmless, since nothing
+   else resolves `ToolRegistry` independently yet) and fixed it
+   proactively too.
+
+Confirmed via a live end-to-end run: agent count went from 0 -> 1
+("planning"), and `manager.execute(agent="planning", goal=...)` ran
+the full pipeline through to a real (correctly-failing-on-unknown-
+capability) `AgentResult`, proving the whole chain — reasoning,
+planning, optimization, compilation, workflow execution, experience
+recording — is actually wired end-to-end for the first time.
+
+Remaining
+
+- Only one concrete agent exists (PlanningAgent). browser/, desktop/,
+  memory/, reviewer/, vision/ agent subpackages are empty stubs
+  (`__init__.py` only)
+- backend/agents/execution/ (engine, scheduler, runner, retry,
+  checkpoint, session) is entirely empty stub files
+- No test coverage yet for the "unknown capability" failure path or
+  for Agent.execute()'s success path with a goal that resolves to a
+  real registered tool
 
 ---
 

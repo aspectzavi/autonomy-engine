@@ -26,9 +26,25 @@ class ToolManager:
         registry: ToolRegistry | None = None,
         executor: ToolExecutor | None = None,
     ) -> None:
-        self._registry = registry or ToolRegistry()
-        self._executor = executor or ToolExecutor(
-            self._registry,
+        #
+        # NOTE: must be `is None`, not `registry or ToolRegistry()`.
+        # ToolRegistry defines __len__, so an injected-but-empty
+        # registry would evaluate as falsy and be silently discarded
+        # in favor of a new, disconnected registry. See the identical
+        # bug fixed in AgentManager.__init__.
+        #
+        self._registry = (
+            registry
+            if registry is not None
+            else ToolRegistry()
+        )
+
+        self._executor = (
+            executor
+            if executor is not None
+            else ToolExecutor(
+                self._registry,
+            )
         )
 
     # ------------------------------------------------------------------
