@@ -82,3 +82,20 @@ def test_bootstrap_workflow_service_uses_the_full_pipeline() -> None:
         runtime,
         WorkflowRuntimePipeline,
     )
+
+
+def test_bootstrap_task_service_is_registered_and_reachable() -> None:
+    """
+    TaskService must be a real, working part of a freshly constructed
+    KernelBootstrap -- resolvable, startable, and able to run a
+    submitted task -- not merely present in the container.
+    """
+
+    from backend.core.services.task_service import TaskService
+
+    bootstrap = KernelBootstrap()
+
+    service = bootstrap.container.resolve(TaskService)
+
+    assert service is bootstrap.task_service
+    assert isinstance(service, TaskService)

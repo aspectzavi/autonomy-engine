@@ -45,9 +45,10 @@ async def test_runtime_shutdown() -> None:
 
     assert diagnostics["is_running"] is False
     assert diagnostics["state"] == "stopped"
-    assert diagnostics["service_count"] == 3
+    assert diagnostics["service_count"] == 4
     assert diagnostics["shutdown_order"] == (
         "workflow-service",
         "tool-service",
+        "task-service",
         "agent-service",
     )

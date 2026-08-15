@@ -32,6 +32,9 @@ from backend.core.services.agent_service import (
 from backend.core.services.memory_service import (
     MemoryService,
 )
+from backend.core.services.task_service import (
+    TaskService,
+)
 from backend.core.services.tool_service import (
     ToolService,
 )
@@ -62,6 +65,10 @@ def test_runtime_services() -> None:
 
     assert container.contains(
         AgentService,
+    )
+
+    assert container.contains(
+        TaskService,
     )
 
     assert container.contains(

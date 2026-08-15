@@ -33,6 +33,9 @@ from backend.core.services.agent_service import (
 from backend.core.services.memory_service import (
     MemoryService,
 )
+from backend.core.services.task_service import (
+    TaskService,
+)
 from backend.core.services.tool_service import (
     ToolService,
 )
@@ -64,6 +67,13 @@ def register_runtime_services(
     ):
         container.register_singleton(
             AgentService,
+        )
+
+    if not container.contains(
+        TaskService,
+    ):
+        container.register_singleton(
+            TaskService,
         )
 
     if not container.contains(

@@ -8,9 +8,9 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 160 passed, 0 failed
+- Tests: 172 passed, 0 failed
 - Ruff: PASS
-- Mypy (strict): PASS — 441 source files
+- Mypy (strict): PASS — 434 source files
 
 ---
 
@@ -115,7 +115,55 @@ Remaining
 
 Status
 
-30%
+60%
+
+Completed
+
+- Task base class (execute() lifecycle: cancellation check -> RUNNING
+  -> run() -> COMPLETED/FAILED, with task.started/completed/failed
+  events published throughout)
+- TaskQueue (priority heap, FIFO within a priority tier), TaskExecutor,
+  TaskScheduler, TaskPipeline (queue+scheduler wrapper), TaskWorker
+  (background polling loop primitive, available but not auto-started)
+- PlaceholderTask, ToolTask, RuleBasedTaskFactory
+- New: TaskService — Tasks previously had no service and was never
+  registered in the container at all (unlike Tool/Agent/Workflow).
+  Built TaskService following the same pattern as the other three,
+  registered it in `register_runtime_services()`, and wired it into
+  `KernelBootstrap`, `ServiceLocator`, and `Application` alongside
+  the existing three services
+- Verified end-to-end via a live bootstrap run: submit a task through
+  `bootstrap.task_service`, run it, get a real `TaskResult` back
+- Deleted 8 empty duplicate-name stub files (task_context.py,
+  task_executor.py, task_queue.py, task_result.py, task_scheduler.py,
+  task_status.py, ids.py, task_id.py) — same clutter pattern seen in
+  workflows/runtime, harmless here since they were empty, but same
+  landmine shape as the earlier real bugs
+- tests/tasks/ added (was empty/nonexistent before this session):
+  queue ordering, scheduler, service lifecycle, bootstrap wiring
+
+### Bug fixed this session (same class, found proactively)
+
+`TaskScheduler.__init__` used `queue or TaskQueue()`. `TaskQueue`
+defines `__len__`, so an injected-but-empty queue would be silently
+discarded — the identical bug fixed in `AgentManager` and
+`ToolManager`. Fixed with an explicit `is None` check before it could
+cause a live failure (nothing yet resolves `TaskQueue` independently
+the way `create_agent_factory()` does for `AgentRegistry`, so this
+was a landmine, not yet an active bug — same as the `ToolManager` fix).
+
+Remaining
+
+- `backend/agents/execution/` (engine, scheduler, runner, retry,
+  checkpoint, session) is entirely empty stub files — a
+  higher-level orchestration layer above tasks that doesn't exist yet
+- `TaskWorker` (continuous background polling) is built but not
+  wired into `TaskService.on_start()` — deliberately left on-demand
+  (`submit()` + `run_all()`) to match the synchronous, non-background
+  pattern the other three services use; revisit if background
+  processing is actually needed
+- No concrete tasks exist yet beyond `PlaceholderTask`/`ToolTask` —
+  `RuleBasedTaskFactory` resolves every capability to a placeholder
 
 ---
 

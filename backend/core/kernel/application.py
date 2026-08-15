@@ -28,6 +28,7 @@ from backend.core.observability.container import (
 from backend.core.config.config import EngineConfig
 from backend.app.container.service_locator import ServiceLocator
 from backend.core.services.agent_service import AgentService
+from backend.core.services.task_service import TaskService
 from backend.core.services.tool_service import ToolService
 from backend.core.services.workflow_service import WorkflowService
 
@@ -108,6 +109,15 @@ class Application:
         Return the runtime agent service.
         """
         return self.services.agents
+
+    @property
+    def task_service(
+        self,
+    ) -> TaskService:
+        """
+        Return the runtime task service.
+        """
+        return self.services.tasks
 
     @property
     def workflow_service(

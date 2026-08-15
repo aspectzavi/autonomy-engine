@@ -45,6 +45,9 @@ from backend.core.services.tool_service import ToolService
 from backend.core.services.agent_service import (
     AgentService,
 )
+from backend.core.services.task_service import (
+    TaskService,
+)
 from backend.core.services.workflow_service import (
     WorkflowService,
 )
@@ -138,6 +141,12 @@ class KernelBootstrap:
             )
         )
 
+        self._task_service = (
+            self._container.resolve(
+                TaskService,
+            )
+        )
+
         self._workflow_service = (
             self._container.resolve(
                 WorkflowService,
@@ -187,6 +196,10 @@ class KernelBootstrap:
 
         self.register_service(
             self._agent_service,
+        )
+
+        self.register_service(
+            self._task_service,
         )
 
         self.register_service(
@@ -284,6 +297,15 @@ class KernelBootstrap:
         Return the runtime agent service.
         """
         return self._agent_service
+
+    @property
+    def task_service(
+        self,
+    ) -> TaskService:
+        """
+        Return the runtime task service.
+        """
+        return self._task_service
 
     @property
     def workflow_service(
@@ -430,6 +452,9 @@ class KernelBootstrap:
             ),
             "agent_service": (
                 self.agent_service.diagnostics()
+            ),
+            "task_service": (
+                self.task_service.diagnostics()
             ),
             "workflow_service": (
                 self.workflow_service.diagnostics()
