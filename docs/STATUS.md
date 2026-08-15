@@ -8,7 +8,7 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 172 passed, 0 failed
+- Tests: 178 passed, 0 failed
 - Ruff: PASS
 - Mypy (strict): PASS — 434 source files
 
@@ -235,7 +235,74 @@ Remaining
 
 Status
 
-10%
+35%
+
+Completed
+
+- MemoryEntry (immutable record), MemoryQuery, MemoryResult
+- MemoryStore (in-memory provider: store/query/delete/clear/size,
+  substring search)
+- MemoryService (thin service wrapper around a MemoryProvider) —
+  already registered in the container before this session
+- ExperienceRecorder (converts agent execution outcomes into
+  MemoryEntry objects)
+- ExecutionMemory (per-run scratch space: retrieved + generated
+  memories, variables)
+- Wired for the first time this session: `AgentService.execute()` —
+  a new method, now the recommended entry point instead of calling
+  `manager.execute()` directly — auto-attaches an `ExecutionMemory`
+  to the context before running, and persists everything the agent
+  generated to `MemoryService` afterward. Verified end-to-end via a
+  live bootstrap run: executed a goal, then queried MemoryService
+  and got the generated experience back.
+
+### Gap found and fixed this session
+
+The entire experience-recording pipeline was built and exercised
+(`Agent.execute()` already called `context.memory.remember(...)` on
+success/failure) but **nothing ever persisted it anywhere**.
+`ExecutionMemory.remember()` only appends to a local in-memory list;
+its own docstring says "Persistence is handled later by
+MemoryService" — but nothing did that. `AgentManager.execute()`
+passed `context` straight through untouched, and no caller anywhere
+in the codebase ever attached an `ExecutionMemory` to `AgentContext`
+in the first place. So every goal ever executed silently generated
+zero durable memory, indistinguishable from working correctly since
+nothing raised an error.
+
+Fixed by adding `AgentService.execute()`, which:
+1. auto-creates `ExecutionMemory()` on the context if not already
+   present (so recording during the run has somewhere to land)
+2. after execution, flushes every generated `MemoryEntry` through
+   `MemoryService.store()`
+
+This does not change `Agent`/`AgentManager` at all — `Agent.execute()`
+already did the right thing on its side; the gap was purely in
+"nobody constructs the context correctly and nobody flushes it
+afterward," which is exactly what a service-layer orchestration
+method is for (matching how `TaskService`/`ToolService`/
+`WorkflowService` each own their subsystem's top-level orchestration).
+
+Remaining
+
+- `MemoryRegistry` (multi-provider registry), `VectorMemory`,
+  `VectorStore`, `EpisodicMemory`, `SemanticSearch`,
+  `EmbeddingService`/`EmbeddingProvider`, `MemoryConsolidator`,
+  `MemoryRanker`, `MemoryImportance` — all fully built but referenced
+  nowhere outside their own files. `MemoryService` only ever uses the
+  single flat `MemoryStore` (substring search); none of the
+  vector/semantic/episodic infrastructure is connected to it
+- `MemoryStore.query()` is substring matching only — no ranking,
+  importance weighting, or semantic search despite those components
+  existing
+- No memory retrieval happens before an agent plans — experience is
+  now persisted, but nothing yet calls `memory_service.query()` to
+  feed past experience back into planning/reasoning
+- `AgentMemory` (`backend/core/agents/memory.py`) is a separate,
+  unrelated key/value scratch class that is not used by
+  `AgentContext` at all (`AgentContext.memory` is `ExecutionMemory`,
+  a different type) — likely leftover from an earlier design; not
+  touched this session since nothing references it either way
 
 ---
 
