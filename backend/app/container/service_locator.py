@@ -15,6 +15,7 @@ from backend.app.container.container import Container
 from backend.core.config.config import EngineConfig
 from backend.core.services.tool_service import ToolService
 from backend.core.services.agent_service import AgentService
+from backend.core.services.task_service import TaskService
 from backend.core.services.workflow_service import WorkflowService
 
 class ServiceLocator:
@@ -74,6 +75,16 @@ class ServiceLocator:
             AgentService,
         )
 
+    @property
+    def tasks(
+        self,
+    ) -> TaskService:
+        """
+        Return the runtime task service.
+        """
+        return self.container.resolve(
+            TaskService,
+        )
 
     @property
     def workflows(
@@ -122,6 +133,9 @@ class ServiceLocator:
                 ).__name__,
                 "agents": type(
                     self.agents,
+                ).__name__,
+                "tasks": type(
+                    self.tasks,
                 ).__name__,
                 "workflows": type(
                     self.workflows,

@@ -23,8 +23,24 @@ class TaskScheduler:
         queue: TaskQueue | None = None,
         executor: TaskExecutor | None = None,
     ) -> None:
-        self._queue = queue or TaskQueue()
-        self._executor = executor or TaskExecutor()
+        #
+        # NOTE: must be `is None`, not `queue or TaskQueue()`.
+        # TaskQueue defines __len__, so an injected-but-empty queue
+        # would evaluate as falsy and be silently discarded in favor
+        # of a new, disconnected queue. Same bug class fixed in
+        # AgentManager and ToolManager.
+        #
+        self._queue = (
+            queue
+            if queue is not None
+            else TaskQueue()
+        )
+
+        self._executor = (
+            executor
+            if executor is not None
+            else TaskExecutor()
+        )
 
     # ------------------------------------------------------------------
     # Properties
