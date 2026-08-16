@@ -193,6 +193,53 @@ class BrowserProvider(Provider):
         """
 
     @abstractmethod
+    async def text_content(
+        self,
+        session: BrowserSession,
+    ) -> ProviderResult:
+        """
+        Retrieve the current page's visible text, without HTML
+        markup. Cheaper for an LLM to consume than raw content().
+        """
+
+    @abstractmethod
+    async def wait_for(
+        self,
+        session: BrowserSession,
+        *,
+        selector: str | None = None,
+        timeout: float | None = None,
+    ) -> ProviderResult:
+        """
+        Wait for a selector to appear, or for a fixed timeout (in
+        seconds) if no selector is given.
+        """
+
+    @abstractmethod
+    async def upload(
+        self,
+        session: BrowserSession,
+        selector: str,
+        file_path: str,
+    ) -> ProviderResult:
+        """
+        Attach a local file to a file-input element.
+        """
+
+    @abstractmethod
+    async def download(
+        self,
+        session: BrowserSession,
+        *,
+        trigger_selector: str,
+        destination: str,
+    ) -> ProviderResult:
+        """
+        Click an element that triggers a download and save the
+        downloaded file to `destination`.
+        """
+
+    @abstractmethod
     async def current_url(
         self,
         session: BrowserSession,

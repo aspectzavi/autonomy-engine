@@ -8,9 +8,9 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 198 passed, 0 failed
+- Tests: 230 passed, 0 failed
 - Ruff: PASS
-- Mypy (strict): PASS — 436 source files
+- Mypy (strict): PASS — 439 source files
 
 ---
 
@@ -313,7 +313,74 @@ Remaining
 
 Status
 
-15%
+65%
+
+Completed — first real implementation this session, not just
+scaffolding
+
+- Design goal (per project owner): Playwright does the actual
+  browser work deterministically — no LLM call per action — to keep
+  token cost low. A separate LLM-driven provider (browser_use,
+  already partially scaffolded in browser_use_provider.py /
+  browser_use_adapter.py) is intended to be incorporated later,
+  behind the same BrowserProvider abstraction, for tasks that
+  genuinely need autonomous "figure this unfamiliar page out"
+  behavior.
+- `PlaywrightBrowserProvider`: concrete `BrowserProvider` covering
+  navigate/back/forward/refresh, click/type/press/scroll,
+  screenshot/content/text_content/current_url/title, wait_for,
+  upload, download. Lazy-starts the actual Chromium process on
+  first use, not at construction/registration time.
+- `BrowserSessionManager`: owns one lazily-created default session,
+  reused across a sequence of tool calls so navigate -> click ->
+  extract-text all act on the same page.
+- 10 browser tools (`backend/tools/browser/*_tool.py` — all 10 were
+  empty stub files before this session): navigate, click, fill,
+  press_key, scroll, extract_text, screenshot, wait, upload_file,
+  download. Each is a thin, deterministic wrapper: one tool call in,
+  one Playwright action out, no LLM involved in between.
+  `extract_text` returns clean visible text (not raw HTML) and
+  `screenshot` returns base64-encoded PNG, both chosen specifically
+  to minimize what an LLM has to parse/pay for downstream.
+- Extended the `BrowserProvider` abstraction itself with
+  `text_content()`, `wait_for()`, `upload()`, `download()` — these
+  didn't exist before; added because the tool layer genuinely needed
+  them, keeping the interface (not just the Playwright impl)
+  complete for any future provider.
+- Wired into `BuiltinToolFactory` / `ToolService`, the same
+  container-registered path every other tool goes through.
+- Fixed a real resource leak found via live testing: `ToolService.
+  on_stop()` never closed the browser, so the underlying Playwright
+  Node.js driver process was abandoned instead of shut down (visible
+  as "unclosed transport" warnings on shutdown). Fixed by closing
+  the session and stopping the provider in `on_stop()`.
+- Verified twice via live runs through the real DI container: (1)
+  navigate to a real page, extract real visible text, capture a real
+  PNG screenshot; (2) confirmed clean shutdown with no warnings after
+  the on_stop() fix.
+- tests/browser/ added (previously nonexistent): a `FakeBrowserProvider`
+  test double for fast argument-validation/delegation tests across
+  all 10 tools, `BrowserSessionManager` lifecycle tests, and — not
+  mocked — 7 integration tests that launch real Chromium and hit a
+  real page (navigate+extract text, screenshot PNG-signature check,
+  session URL/title tracking, invalid-URL failure handling, start()
+  idempotency, stop()-without-start(), acting on a closed session).
+
+Remaining
+
+- `browser_use_provider.py` (16KB) / `browser_use_adapter.py` (6.5KB)
+  already exist with substantial code but are not yet wired to
+  anything — that's the deliberately deferred "incorporate
+  browser-use later" piece, not part of this session's scope
+- Multi-session support (BrowserSessionManager only tracks one
+  default session; BrowserProvider.create_session() supports more,
+  nothing above it uses that yet)
+- No selector-discovery / accessibility-tree helper tools (an agent
+  must already know the CSS selector it wants to click/fill)
+- Config sections under `backend/app/config/sections/browser/` exist
+  but aren't wired into `BrowserConfig` construction yet —
+  `PlaywrightBrowserProvider` currently only takes a `BrowserConfig`
+  directly, not the config-loader path the rest of the engine uses
 
 ---
 
