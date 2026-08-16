@@ -93,7 +93,15 @@ class ToolService(KernelService):
     async def on_stop(self) -> None:
         """
         Shutdown the tool subsystem.
+
+        Closes the shared browser session and stops its provider (if
+        one was ever opened), then clears the tool registry. Without
+        this, a launched browser process is left to be garbage
+        collected uncleanly instead of shut down properly.
         """
+        await self.factory.browser_sessions.close()
+        await self.factory.browser_sessions.provider.stop()
+
         self.registry.clear()
 
         self.logger.info(
