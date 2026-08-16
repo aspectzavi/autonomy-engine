@@ -8,9 +8,9 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 178 passed, 0 failed
+- Tests: 198 passed, 0 failed
 - Ruff: PASS
-- Mypy (strict): PASS — 434 source files
+- Mypy (strict): PASS — 436 source files
 
 ---
 
@@ -235,74 +235,77 @@ Remaining
 
 Status
 
-35%
+50%
 
 Completed
 
-- MemoryEntry (immutable record), MemoryQuery, MemoryResult
-- MemoryStore (in-memory provider: store/query/delete/clear/size,
-  substring search)
-- MemoryService (thin service wrapper around a MemoryProvider) —
-  already registered in the container before this session
-- ExperienceRecorder (converts agent execution outcomes into
-  MemoryEntry objects)
-- ExecutionMemory (per-run scratch space: retrieved + generated
-  memories, variables)
-- Wired for the first time this session: `AgentService.execute()` —
-  a new method, now the recommended entry point instead of calling
-  `manager.execute()` directly — auto-attaches an `ExecutionMemory`
-  to the context before running, and persists everything the agent
-  generated to `MemoryService` afterward. Verified end-to-end via a
-  live bootstrap run: executed a goal, then queried MemoryService
-  and got the generated experience back.
+- MemoryEntry, MemoryQuery, MemoryResult, MemoryService,
+  ExperienceRecorder, ExecutionMemory (all as before)
+- `AgentService.execute()` persistence wiring (previous session)
+- New this session — real semantic search, not just persistence:
+  - `HashingEmbeddingProvider`: concrete `EmbeddingProvider` using
+    feature hashing (the "hashing trick" — same technique behind
+    scikit-learn's `HashingVectorizer`). Deterministic, fully local,
+    no API key or network access needed. Produces normalized
+    fixed-dimension vectors from shared vocabulary.
+  - `InMemoryVectorStore`: concrete `VectorStore` — brute-force
+    cosine-similarity search over stored (entry, embedding) pairs
+  - `VectorMemory` (previously a documented-but-empty placeholder)
+    now actually embeds every stored entry and answers `query()` via
+    `SemanticSearch` (embed query -> cosine similarity search)
+    instead of substring matching
+  - Registered as the live `MemoryStore` implementation in
+    `register_runtime_services()`: `EmbeddingProvider` ->
+    `HashingEmbeddingProvider`, `VectorStore` -> `InMemoryVectorStore`,
+    `MemoryStore` -> `VectorMemory`, following the exact same
+    swap-the-registered-implementation pattern already used for
+    `WorkflowRuntime` -> `WorkflowRuntimePipeline`
+- Verified end-to-end via a live bootstrap run: stored entries with
+  varying vocabulary overlap, queried with a related-but-not-identical
+  phrase, confirmed entries sharing vocabulary ranked above an
+  unrelated entry, confirmed `MemoryService.provider` is the exact
+  same `VectorMemory` singleton the container resolves for
+  `MemoryStore`
+- tests/memory/ added: `HashingEmbeddingProvider` (determinism,
+  dimensions, normalization, empty text, similarity ordering),
+  `InMemoryVectorStore` (ranking, limit, add_many, remove/clear),
+  `VectorMemory` (ranking, limit, delete/clear cascading to the
+  vector index, diagnostics), plus a bootstrap-level regression test
 
-### Gap found and fixed this session
+### Important limitation — be honest about what this actually does
 
-The entire experience-recording pipeline was built and exercised
-(`Agent.execute()` already called `context.memory.remember(...)` on
-success/failure) but **nothing ever persisted it anywhere**.
-`ExecutionMemory.remember()` only appends to a local in-memory list;
-its own docstring says "Persistence is handled later by
-MemoryService" — but nothing did that. `AgentManager.execute()`
-passed `context` straight through untouched, and no caller anywhere
-in the codebase ever attached an `ExecutionMemory` to `AgentContext`
-in the first place. So every goal ever executed silently generated
-zero durable memory, indistinguishable from working correctly since
-nothing raised an error.
-
-Fixed by adding `AgentService.execute()`, which:
-1. auto-creates `ExecutionMemory()` on the context if not already
-   present (so recording during the run has somewhere to land)
-2. after execution, flushes every generated `MemoryEntry` through
-   `MemoryService.store()`
-
-This does not change `Agent`/`AgentManager` at all — `Agent.execute()`
-already did the right thing on its side; the gap was purely in
-"nobody constructs the context correctly and nobody flushes it
-afterward," which is exactly what a service-layer orchestration
-method is for (matching how `TaskService`/`ToolService`/
-`WorkflowService` each own their subsystem's top-level orchestration).
+`HashingEmbeddingProvider` captures **shared vocabulary** (literal
+token overlap), not true semantic/synonym understanding. A query for
+"feline resting near a bright window" will NOT rank highly against
+"the cat sat on the warm windowsill" — none of those words overlap,
+so cosine similarity is near zero regardless of the obvious semantic
+relationship a real embedding model would catch. This was verified
+directly: an early smoke test using synonym-heavy phrasing produced
+nonsensical rankings until reworded to share actual words, which then
+worked correctly and predictably. This is a known, expected property
+of hashing-trick embeddings, not a bug — but it means "semantic
+search" here means "lexical/keyword search with fuzzy matching and
+ranking," not the model-backed retrieval a production system would
+eventually want. `EmbeddingProvider` is registered behind its
+abstraction specifically so a real model-backed provider (OpenAI,
+SentenceTransformers, Ollama, etc.) can be swapped in later without
+touching `VectorMemory`, `SemanticSearch`, or `MemoryService`.
 
 Remaining
 
-- `MemoryRegistry` (multi-provider registry), `VectorMemory`,
-  `VectorStore`, `EpisodicMemory`, `SemanticSearch`,
-  `EmbeddingService`/`EmbeddingProvider`, `MemoryConsolidator`,
-  `MemoryRanker`, `MemoryImportance` — all fully built but referenced
-  nowhere outside their own files. `MemoryService` only ever uses the
-  single flat `MemoryStore` (substring search); none of the
-  vector/semantic/episodic infrastructure is connected to it
-- `MemoryStore.query()` is substring matching only — no ranking,
-  importance weighting, or semantic search despite those components
-  existing
+- Swap `HashingEmbeddingProvider` for a real model-backed provider
+  when true semantic/synonym understanding is needed
+- `MemoryRegistry` (multi-provider registry), `EpisodicMemory`,
+  `MemoryConsolidator`, `MemoryRanker`, `MemoryImportance` — still
+  fully built but referenced nowhere outside their own files
 - No memory retrieval happens before an agent plans — experience is
-  now persisted, but nothing yet calls `memory_service.query()` to
-  feed past experience back into planning/reasoning
+  persisted and semantically queryable, but nothing yet calls
+  `memory_service.query()` to feed past experience back into
+  planning/reasoning
 - `AgentMemory` (`backend/core/agents/memory.py`) is a separate,
-  unrelated key/value scratch class that is not used by
-  `AgentContext` at all (`AgentContext.memory` is `ExecutionMemory`,
-  a different type) — likely leftover from an earlier design; not
-  touched this session since nothing references it either way
+  unrelated key/value scratch class not used by `AgentContext` at
+  all — likely leftover from an earlier design; still untouched
+  since nothing references it either way
 
 ---
 
