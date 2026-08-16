@@ -143,3 +143,40 @@ async def test_bootstrap_agent_execution_persists_memory() -> None:
     )
 
     assert len(found.entries) >= 1
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_memory_store_is_semantic_vector_memory() -> None:
+    """
+    The container's registered MemoryStore must be VectorMemory (real
+    embeddings + cosine similarity search), not the plain substring-
+    matching MemoryStore base class -- and it must be the exact same
+    instance MemoryService uses, not a disconnected copy.
+    """
+
+    from backend.core.memory.memory_entry import MemoryEntry
+    from backend.core.memory.memory_query import MemoryQuery
+    from backend.core.memory.memory_store import MemoryStore
+    from backend.core.memory.vector_memory import VectorMemory
+    from backend.core.services.memory_service import MemoryService
+
+    bootstrap = KernelBootstrap()
+
+    provider = bootstrap.container.resolve(MemoryStore)
+    assert isinstance(provider, VectorMemory)
+
+    memory_service = bootstrap.container.resolve(MemoryService)
+    assert memory_service.provider is provider
+
+    await memory_service.store(
+        MemoryEntry(id="a", content="cat sitting by a sunny window"),
+    )
+    await memory_service.store(
+        MemoryEntry(id="b", content="quarterly revenue grew this year"),
+    )
+
+    result = await memory_service.query(
+        MemoryQuery(text="a cat near a window", limit=2),
+    )
+
+    assert result.entries[0].id == "a"

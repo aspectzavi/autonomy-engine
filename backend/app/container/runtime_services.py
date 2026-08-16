@@ -7,10 +7,31 @@ container.
 
 from __future__ import annotations
 
+from typing import Any
+from typing import cast
+
 from backend.app.container.container import Container
 
+from backend.core.memory.embedding_provider import (
+    EmbeddingProvider,
+)
+from backend.core.memory.embedding_service import (
+    EmbeddingService,
+)
+from backend.core.memory.hashing_embedding_provider import (
+    HashingEmbeddingProvider,
+)
+from backend.core.memory.in_memory_vector_store import (
+    InMemoryVectorStore,
+)
 from backend.core.memory.memory_store import (
     MemoryStore,
+)
+from backend.core.memory.vector_memory import (
+    VectorMemory,
+)
+from backend.core.memory.vector_store import (
+    VectorStore,
 )
 from backend.core.observability.events import (
     EventBus,
@@ -128,13 +149,54 @@ def register_runtime_services(
 
     # ------------------------------------------------------------------
     # Memory
+    #
+    # VectorMemory is the production MemoryStore implementation: it
+    # embeds every stored entry and answers queries via cosine
+    # similarity search instead of substring matching. Embedding
+    # generation and vector storage are both registered behind their
+    # abstractions (EmbeddingProvider, VectorStore) so either can be
+    # swapped for a real model/vector-database backend later without
+    # touching VectorMemory or MemoryService.
     # ------------------------------------------------------------------
+
+    if not container.contains(
+        EmbeddingProvider,
+    ):
+        container.register_singleton(
+            cast(
+                type[Any],
+                EmbeddingProvider,
+            ),
+            implementation=HashingEmbeddingProvider,
+        )
+
+    if not container.contains(
+        EmbeddingService,
+    ):
+        container.register_singleton(
+            EmbeddingService,
+        )
+
+    if not container.contains(
+        VectorStore,
+    ):
+        container.register_singleton(
+            cast(
+                type[Any],
+                VectorStore,
+            ),
+            implementation=InMemoryVectorStore,
+        )
 
     if not container.contains(
         MemoryStore,
     ):
         container.register_singleton(
-            MemoryStore,
+            cast(
+                type[Any],
+                MemoryStore,
+            ),
+            implementation=VectorMemory,
         )
 
     if not container.contains(
