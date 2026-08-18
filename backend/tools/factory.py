@@ -6,6 +6,10 @@ Creates and registers the framework's built-in tools.
 
 from __future__ import annotations
 
+from backend.core.config.config import EngineConfig
+from backend.core.providers.browser.browser_config import (
+    BrowserConfig,
+)
 from backend.core.providers.browser.browser_provider import (
     BrowserProvider,
 )
@@ -19,12 +23,19 @@ from backend.core.tools.manager import ToolManager
 from backend.core.tools.tool import Tool
 from backend.tools.browser.click_tool import ClickTool
 from backend.tools.browser.download_tool import DownloadTool
+from backend.tools.browser.extract_links_tool import (
+    ExtractLinksTool,
+)
+from backend.tools.browser.extract_structured_tool import (
+    ExtractStructuredTool,
+)
 from backend.tools.browser.extract_text_tool import (
     ExtractTextTool,
 )
 from backend.tools.browser.fill_tool import FillTool
 from backend.tools.browser.navigate_tool import NavigateTool
 from backend.tools.browser.press_key_tool import PressKeyTool
+from backend.tools.browser.scrape_tool import ScrapeTool
 from backend.tools.browser.screenshot_tool import (
     ScreenshotTool,
 )
@@ -52,18 +63,30 @@ class BuiltinToolFactory:
         self,
         *,
         browser_provider: BrowserProvider | None = None,
+        engine_config: EngineConfig | None = None,
     ) -> None:
         #
         # NOTE: `is None`, not `browser_provider or ...()`, kept
         # consistent with the __len__ falsy-empty-collection
         # discipline used throughout this codebase.
         #
+        provider = browser_provider
+
+        if provider is None:
+            browser_config = (
+                BrowserConfig.from_engine_config(
+                    engine_config.browser,
+                )
+                if engine_config is not None
+                else None
+            )
+
+            provider = PlaywrightBrowserProvider(
+                config=browser_config,
+            )
+
         self._browser_sessions = BrowserSessionManager(
-            provider=(
-                browser_provider
-                if browser_provider is not None
-                else PlaywrightBrowserProvider()
-            ),
+            provider=provider,
         )
 
     # ------------------------------------------------------------------
@@ -107,6 +130,9 @@ class BuiltinToolFactory:
             PressKeyTool(sessions=sessions),
             ScrollTool(sessions=sessions),
             ExtractTextTool(sessions=sessions),
+            ExtractLinksTool(sessions=sessions),
+            ExtractStructuredTool(sessions=sessions),
+            ScrapeTool(sessions=sessions),
             ScreenshotTool(sessions=sessions),
             WaitTool(sessions=sessions),
             UploadFileTool(sessions=sessions),

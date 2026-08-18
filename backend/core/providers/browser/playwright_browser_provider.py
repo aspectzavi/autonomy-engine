@@ -68,8 +68,83 @@ _CAPABILITIES = frozenset(
         "download",
         "current_url",
         "title",
+        "extract_links",
+        "extract_structured",
     },
 )
+
+#
+# Generic (site-agnostic) DOM extraction. These run in the page's own
+# JS context via page.evaluate()/eval_on_selector_all(), so they work
+# on any page's markup without needing to know its selectors ahead of
+# time.
+#
+
+_EXTRACT_LINKS_JS = """
+elements => elements.map(el => ({
+    href: el.href,
+    text: (el.innerText || el.textContent || "").trim(),
+    rel: el.getAttribute("rel"),
+}))
+"""
+
+_EXTRACT_STRUCTURED_JS = """
+() => {
+    const headings = Array.from(
+        document.querySelectorAll("h1, h2, h3, h4, h5, h6"),
+    ).map(el => ({
+        level: parseInt(el.tagName.substring(1), 10),
+        text: (el.innerText || el.textContent || "").trim(),
+    })).filter(h => h.text.length > 0);
+
+    const links = Array.from(
+        document.querySelectorAll("a[href]"),
+    ).map(el => ({
+        href: el.href,
+        text: (el.innerText || el.textContent || "").trim(),
+        rel: el.getAttribute("rel"),
+    }));
+
+    const images = Array.from(
+        document.querySelectorAll("img[src]"),
+    ).map(el => ({
+        src: el.src,
+        alt: el.getAttribute("alt") || "",
+    }));
+
+    const tables = Array.from(
+        document.querySelectorAll("table"),
+    ).map(table => {
+        const rows = Array.from(table.querySelectorAll("tr"));
+        return rows.map(row =>
+            Array.from(row.querySelectorAll("th, td")).map(
+                cell => (cell.innerText || cell.textContent || "").trim(),
+            ),
+        );
+    });
+
+    const metaDescription = document.querySelector(
+        'meta[name="description"]',
+    );
+
+    const body = document.body;
+
+    return {
+        url: window.location.href,
+        title: document.title,
+        meta_description: metaDescription
+            ? metaDescription.getAttribute("content")
+            : null,
+        headings: headings,
+        text: body
+            ? (body.innerText || body.textContent || "").trim()
+            : "",
+        links: links,
+        images: images,
+        tables: tables,
+    };
+}
+"""
 
 
 class PlaywrightBrowserProvider(BrowserProvider):
@@ -565,6 +640,41 @@ class PlaywrightBrowserProvider(BrowserProvider):
         )
 
     # ------------------------------------------------------------------
+    # Generic extraction
+    # ------------------------------------------------------------------
+
+    async def extract_links(
+        self,
+        session: BrowserSession,
+    ) -> ProviderResult:
+        """
+        Extract every link on the current page.
+        """
+
+        return await self._run(
+            session,
+            lambda page: page.eval_on_selector_all(
+                "a[href]",
+                _EXTRACT_LINKS_JS,
+            ),
+        )
+
+    async def extract_structured(
+        self,
+        session: BrowserSession,
+    ) -> ProviderResult:
+        """
+        Extract a generic structured summary of the current page.
+        """
+
+        return await self._run(
+            session,
+            lambda page: page.evaluate(
+                _EXTRACT_STRUCTURED_JS,
+            ),
+        )
+
+    # ------------------------------------------------------------------
     # Provider Interface
     # ------------------------------------------------------------------
 
@@ -696,7 +806,13 @@ class PlaywrightBrowserProvider(BrowserProvider):
         if capability == "current_url":
             return await self.current_url(session)
 
-        return await self.title(session)
+        if capability == "title":
+            return await self.title(session)
+
+        if capability == "extract_links":
+            return await self.extract_links(session)
+
+        return await self.extract_structured(session)
 
     # ------------------------------------------------------------------
     # Diagnostics

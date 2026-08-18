@@ -9,6 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.core.config.browser import (
+        BrowserConfig as EngineBrowserConfig,
+    )
 
 
 @dataclass(slots=True)
@@ -66,6 +72,40 @@ class BrowserConfig:
         return (
             self.viewport_width,
             self.viewport_height,
+        )
+
+    # ------------------------------------------------------------------
+    # Conversion
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_engine_config(
+        cls,
+        config: "EngineBrowserConfig",
+    ) -> "BrowserConfig":
+        """
+        Build a provider-level BrowserConfig from the engine's
+        top-level EngineConfig.browser settings.
+
+        EngineConfig.browser is the config the rest of the engine
+        (and its env-var loading) actually populates; this is what
+        lets that configuration reach the Playwright provider instead
+        of the provider silently always using hardcoded defaults.
+        """
+
+        return cls(
+            headless=config.headless,
+            viewport_width=config.viewport_width,
+            viewport_height=config.viewport_height,
+            user_agent=config.user_agent,
+            locale=config.locale,
+            timezone=config.timezone,
+            executable_path=None,
+            timeout=config.timeout_ms / 1000,
+            navigation_timeout=(
+                config.navigation_timeout_ms / 1000
+            ),
+            accept_downloads=config.downloads_enabled,
         )
 
     # ------------------------------------------------------------------
