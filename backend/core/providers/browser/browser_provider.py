@@ -258,6 +258,38 @@ class BrowserProvider(Provider):
         """
 
     # ------------------------------------------------------------------
+    # Generic extraction (site-agnostic -- works on any page's DOM
+    # without needing site-specific selectors, unlike click()/type())
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    async def extract_links(
+        self,
+        session: BrowserSession,
+    ) -> ProviderResult:
+        """
+        Extract every link on the current page.
+
+        Output is a list of dicts with `href` (resolved to an
+        absolute URL), `text` (visible link text), and `rel` (the
+        rel attribute, if any -- e.g. "next", "nofollow").
+        """
+
+    @abstractmethod
+    async def extract_structured(
+        self,
+        session: BrowserSession,
+    ) -> ProviderResult:
+        """
+        Extract a generic structured summary of the current page:
+        title, meta description, headings, links, tables, and images.
+
+        Works on any page without needing site-specific selectors --
+        the intended default for scraping sites whose markup isn't
+        known ahead of time.
+        """
+
+    # ------------------------------------------------------------------
     # Provider Interface
     # ------------------------------------------------------------------
 

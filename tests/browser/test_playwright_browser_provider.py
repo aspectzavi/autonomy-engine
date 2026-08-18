@@ -120,3 +120,49 @@ async def test_acting_on_a_closed_session_fails_cleanly() -> None:
         assert not result.success
     finally:
         await provider.stop()
+
+
+async def test_extract_links_against_a_real_page() -> None:
+    provider = PlaywrightBrowserProvider()
+
+    try:
+        session = await provider.create_session()
+        await provider.navigate(session, "https://example.com")
+
+        result = await provider.extract_links(session)
+
+        assert result.success
+        links = result.output
+        assert len(links) >= 1
+        assert any(
+            "iana.org" in (link.get("href") or "")
+            for link in links
+        )
+        assert all(
+            {"href", "text", "rel"} <= link.keys()
+            for link in links
+        )
+    finally:
+        await provider.stop()
+
+
+async def test_extract_structured_against_a_real_page() -> None:
+    provider = PlaywrightBrowserProvider()
+
+    try:
+        session = await provider.create_session()
+        await provider.navigate(session, "https://example.com")
+
+        result = await provider.extract_structured(session)
+
+        assert result.success
+        data = result.output
+        assert data["title"] == "Example Domain"
+        assert "Example Domain" in data["text"]
+        assert isinstance(data["links"], list)
+        assert isinstance(data["headings"], list)
+        assert isinstance(data["images"], list)
+        assert isinstance(data["tables"], list)
+        assert data["headings"][0]["text"] == "Example Domain"
+    finally:
+        await provider.stop()

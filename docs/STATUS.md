@@ -8,9 +8,9 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 230 passed, 0 failed
+- Tests: 254 passed, 0 failed
 - Ruff: PASS
-- Mypy (strict): PASS — 439 source files
+- Mypy (strict): PASS — 448 source files
 
 ---
 
@@ -313,10 +313,10 @@ Remaining
 
 Status
 
-65%
+80%
 
-Completed — first real implementation this session, not just
-scaffolding
+Completed — config wiring finished, real multi-page scraping added
+this session, on top of last session's first real implementation
 
 - Design goal (per project owner): Playwright does the actual
   browser work deterministically — no LLM call per action — to keep
@@ -329,58 +329,88 @@ scaffolding
 - `PlaywrightBrowserProvider`: concrete `BrowserProvider` covering
   navigate/back/forward/refresh, click/type/press/scroll,
   screenshot/content/text_content/current_url/title, wait_for,
-  upload, download. Lazy-starts the actual Chromium process on
-  first use, not at construction/registration time.
+  upload, download, extract_links, extract_structured. Lazy-starts
+  the actual Chromium process on first use, not at construction/
+  registration time.
 - `BrowserSessionManager`: owns one lazily-created default session,
   reused across a sequence of tool calls so navigate -> click ->
   extract-text all act on the same page.
-- 10 browser tools (`backend/tools/browser/*_tool.py` — all 10 were
-  empty stub files before this session): navigate, click, fill,
-  press_key, scroll, extract_text, screenshot, wait, upload_file,
+- 13 browser tools (`backend/tools/browser/*_tool.py`): navigate,
+  click, fill, press_key, scroll, extract_text, extract_links,
+  extract_structured, scrape, screenshot, wait, upload_file,
   download. Each is a thin, deterministic wrapper: one tool call in,
   one Playwright action out, no LLM involved in between.
   `extract_text` returns clean visible text (not raw HTML) and
   `screenshot` returns base64-encoded PNG, both chosen specifically
   to minimize what an LLM has to parse/pay for downstream.
-- Extended the `BrowserProvider` abstraction itself with
-  `text_content()`, `wait_for()`, `upload()`, `download()` — these
-  didn't exist before; added because the tool layer genuinely needed
-  them, keeping the interface (not just the Playwright impl)
-  complete for any future provider.
-- Wired into `BuiltinToolFactory` / `ToolService`, the same
-  container-registered path every other tool goes through.
-- Fixed a real resource leak found via live testing: `ToolService.
-  on_stop()` never closed the browser, so the underlying Playwright
-  Node.js driver process was abandoned instead of shut down (visible
-  as "unclosed transport" warnings on shutdown). Fixed by closing
-  the session and stopping the provider in `on_stop()`.
-- Verified twice via live runs through the real DI container: (1)
-  navigate to a real page, extract real visible text, capture a real
-  PNG screenshot; (2) confirmed clean shutdown with no warnings after
-  the on_stop() fix.
-- tests/browser/ added (previously nonexistent): a `FakeBrowserProvider`
-  test double for fast argument-validation/delegation tests across
-  all 10 tools, `BrowserSessionManager` lifecycle tests, and — not
-  mocked — 7 integration tests that launch real Chromium and hit a
-  real page (navigate+extract text, screenshot PNG-signature check,
-  session URL/title tracking, invalid-URL failure handling, start()
-  idempotency, stop()-without-start(), acting on a closed session).
+- Config wiring closed out this session: found a *third* parallel
+  `BrowserConfig` (`EngineConfig.browser`, a dataclass populated by
+  the engine's own config loading) that never reached the
+  provider — `PlaywrightBrowserProvider` always silently used
+  hardcoded defaults regardless of what was configured. Added
+  `BrowserConfig.from_engine_config()` and wired it through
+  `BuiltinToolFactory`, so real engine config now actually reaches
+  Playwright. (The separate pydantic `BrowserSettings` under
+  `backend/app/config/sections/browser/` is still unconnected — see
+  Remaining.)
+- New this session — genuine multi-page scraping ("any site", per
+  project owner's stated frequent use case):
+  - Extended `BrowserProvider` with `extract_links()` and
+    `extract_structured()` — generic DOM extraction (title,
+    headings, visible text, links, images, tables) that works on
+    any page's markup, no site-specific selectors needed.
+  - New `backend/core/scraping/`: `WebScraper` (deterministic crawl
+    orchestrator — no LLM call per page), `PaginationStrategy`
+    abstraction with two implementations —
+    `NextLinkPaginationStrategy` (generic: matches `rel="next"` or
+    "Next"/"older"/chevron-style link text) and
+    `UrlPatternPaginationStrategy` (for `?page={n}`-style sites).
+    Handles max_pages cutoff, cycle detection (site links back to an
+    already-visited page), and navigation/extraction failures
+    without crashing the crawl.
+  - New `browser_scrape` tool: one tool call crawls up to N pages
+    and returns all structured data — an agent pays for one decision
+    ("scrape this site, up to N pages") instead of one decision per
+    page, which is the core token-cost win being asked for. Also
+    added standalone `browser_extract_links` /
+    `browser_extract_structured` tools for single-page use.
+- Fixed a real resource leak found via live testing (previous
+  session): `ToolService.on_stop()` never closed the browser: fixed
+  by closing the session and stopping the provider in `on_stop()`.
+- Verified live through the real DI container, this session: (1)
+  navigated a real multi-page site (books.toscrape.com) 3 pages deep
+  via generic next-link detection, zero site-specific config; (2)
+  `extract_links`/`extract_structured` against example.com returned
+  correct real data (title, links, headings, iana.org link found).
+- tests/browser/ and new tests/scraping/ (previously nonexistent):
+  `FakeBrowserProvider` for fast tool-layer tests, `BrowserSession
+  Manager` lifecycle tests, 9 real-Chromium integration tests
+  (including the two new extraction methods), and — critically —
+  `WebScraper` crawl-loop tests against a scripted fake provider
+  covering max_pages cutoff, cycle detection, and both navigation-
+  and extraction-failure handling.
 
 Remaining
 
-- `browser_use_provider.py` (16KB) / `browser_use_adapter.py` (6.5KB)
-  already exist with substantial code but are not yet wired to
-  anything — that's the deliberately deferred "incorporate
-  browser-use later" piece, not part of this session's scope
+- `browser_use_provider.py` / `browser_use_adapter.py` already exist
+  with substantial code but are not yet wired to anything — the
+  deliberately deferred "incorporate browser-use later" piece
 - Multi-session support (BrowserSessionManager only tracks one
-  default session; BrowserProvider.create_session() supports more,
-  nothing above it uses that yet)
+  default session; `WebScraper.scrape()` opens/closes its own
+  session per call when none is supplied, but nothing runs multiple
+  scrapes concurrently yet)
 - No selector-discovery / accessibility-tree helper tools (an agent
-  must already know the CSS selector it wants to click/fill)
-- Config sections under `backend/app/config/sections/browser/` exist
-  but aren't wired into `BrowserConfig` construction yet —
-  `PlaywrightBrowserProvider` currently only takes a `BrowserConfig`
-  directly, not the config-loader path the rest of the engine uses
+  must already know the CSS selector it wants to click/fill —
+  extract_structured/extract_links help here but don't replace it)
+- The pydantic `BrowserSettings` under
+  `backend/app/config/sections/browser/` (env-var driven,
+  Launch/Context/Downloads/Tracing/Video/Screenshots/Recovery) is
+  still a separate, unconnected config path from the
+  `EngineConfig.browser` dataclass that's now actually wired —
+  three near-duplicate `BrowserConfig`-shaped things total in this
+  codebase, one of which (this one) is still fully orphaned
+- No rate-limiting/politeness delay by default in `WebScraper`
+  beyond the optional `delay_seconds` a caller can pass explicitly
 
 ---
 

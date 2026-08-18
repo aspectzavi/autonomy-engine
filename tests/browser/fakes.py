@@ -117,6 +117,12 @@ class FakeBrowserProvider(BrowserProvider):
     async def title(self, session):
         return self._record("title", session)
 
+    async def extract_links(self, session):
+        return self._record("extract_links", session)
+
+    async def extract_structured(self, session):
+        return self._record("extract_structured", session)
+
     def supports(self, capability: str) -> bool:
         return True
 
