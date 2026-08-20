@@ -8,9 +8,9 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 254 passed, 0 failed
+- Tests: 295 passed, 0 failed
 - Ruff: PASS
-- Mypy (strict): PASS — 448 source files
+- Mypy (strict): PASS — 470 source files
 
 ---
 
@@ -418,7 +418,100 @@ Remaining
 
 Status
 
-5%
+65%
+
+Completed — first real implementation this session (was empty stub
+folders: `backend/agents/desktop/`, `backend/services/desktop/`)
+
+- Design direction (per project owner): both structured, UI-Automation-
+  based control (find elements by name/automation ID/control type,
+  like a CSS selector) AND coordinate-based fallback control, for
+  general-purpose automation of "almost any desktop app" — not
+  limited to a fixed set of known apps.
+- New dependencies: `pywinauto` (Windows UI Automation) and
+  `pyautogui` + `pillow` (coordinate-based mouse/keyboard/screenshot
+  fallback), added to `requirements.txt`.
+- `DesktopProvider` abstraction (mirrors `BrowserProvider`): window/
+  app management (list_windows, connect_window, launch), structured
+  element interaction (click_element, type_into_element,
+  get_element_text, extract_structured), coordinate-based fallback
+  (click_at, move_to, drag, scroll_at), global keyboard (type_text,
+  press_key), and screenshot/current_window_title.
+- `PywinautoDesktopProvider`: concrete implementation. Every call
+  runs through `asyncio.to_thread()` since pywinauto/pyautogui are
+  synchronous libraries, unlike Playwright's native async API.
+- `extract_structured()` is the desktop equivalent of the browser
+  subsystem's generic DOM extraction: dumps every control in the
+  connected window's UI tree (type, name, automation ID, bounding
+  rectangle) without needing to know the app's layout ahead of time.
+- `DesktopSessionManager`: owns one lazily-created default session,
+  mirroring `BrowserSessionManager`.
+- 14 desktop tools (`backend/tools/desktop/*_tool.py`, all built
+  from scratch this session): list_windows, connect_window,
+  launch_app, click_element, type_into_element, get_element_text,
+  extract_structured, click_at, move_mouse, drag, scroll_at,
+  type_text, press_key, screenshot.
+- Wired into `BuiltinToolFactory`/`ToolService` alongside the browser
+  tools (30 tools total now registered). `ToolService.on_stop()`
+  updated to also close the desktop session and stop its provider on
+  shutdown, matching the browser cleanup fix from a previous session.
+
+### Real-world issue found and fixed via live testing
+
+`launch()`'s first implementation matched the newly launched
+process's window by PID (`Desktop().windows(process=pid)`). Verified
+against real Notepad: **failed every time** — Windows 11's packaged
+Notepad launches through a shim/launcher process whose PID never
+matches the actual window-owning process's PID, so PID-based matching
+silently found nothing and timed out. Fixed by diffing window handles
+before and after launch instead of matching by PID — works regardless
+of how indirectly a given app's process actually ends up owning its
+window. This is exactly the kind of thing that would have shipped
+broken without live-testing against a real app rather than trusting
+the implementation because it type-checked.
+
+Verified live end-to-end through the real DI container: launched a
+real Notepad instance, typed real text into its Document control via
+structured element interaction, extracted its real UI tree (38
+controls) and confirmed the title bar reflected the typed text
+(`*Hello from the desktop runtime - Notepad`), captured a real
+screenshot, and shut down cleanly.
+
+tests/desktop/ added (previously nonexistent): a `FakeDesktopProvider`
+test double for fast argument-validation/delegation tests across all
+14 tools plus session-manager lifecycle tests, and — not mocked — 9
+integration tests that launch real Notepad and drive it for real
+(launch+type, extract_structured, screenshot PNG-signature check,
+list_windows, connect_window by title pattern, click+type, launching
+an unknown executable, acting without a connected window, start()
+idempotency). One test initially failed due to a stray pre-existing
+Notepad window (the user's own, left open from earlier manual API
+exploration) confusing the window-diffing logic in `launch()` — fixed
+by adding a before-test cleanup step, not by changing the
+implementation, since the underlying diffing logic was correct.
+
+Remaining
+
+- Config wiring: unlike Browser Runtime, there's no `EngineConfig.
+  desktop` section yet, so `DesktopConfig` always uses hardcoded
+  defaults regardless of engine configuration
+- Multi-session support (same as Browser Runtime: one default
+  session tracked; the abstraction supports more, nothing above it
+  uses that yet)
+- No image/template-matching helper (a common PyAutoGUI pattern:
+  "find this icon on screen and click it") — only raw coordinate
+  actions and structured element matching exist right now
+- `element_info.control_type` in `extract_structured()`'s output is
+  whatever pywinauto's UIA backend reports as a raw string (e.g.
+  "Button", "Edit", "Document") — no normalization/mapping layer
+  over it yet
+- No OCR — the original project handoff mentioned OCR/vision for
+  cases where neither structured access nor known coordinates work;
+  not built this session
+- macOS/Linux desktop automation: `PywinautoDesktopProvider` is
+  Windows-only by nature (pywinauto + the win32-flavored parts of
+  pyautogui); the `DesktopProvider` abstraction itself is
+  platform-neutral, but no macOS/Linux implementation exists
 
 ---
 

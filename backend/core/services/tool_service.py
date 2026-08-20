@@ -94,13 +94,17 @@ class ToolService(KernelService):
         """
         Shutdown the tool subsystem.
 
-        Closes the shared browser session and stops its provider (if
-        one was ever opened), then clears the tool registry. Without
-        this, a launched browser process is left to be garbage
-        collected uncleanly instead of shut down properly.
+        Closes the shared browser session and stops its provider,
+        and closes the shared desktop session and stops its provider
+        (if either was ever opened), then clears the tool registry.
+        Without this, a launched browser process is left to be
+        garbage collected uncleanly instead of shut down properly.
         """
         await self.factory.browser_sessions.close()
         await self.factory.browser_sessions.provider.stop()
+
+        await self.factory.desktop_sessions.close()
+        await self.factory.desktop_sessions.provider.stop()
 
         self.registry.clear()
 

@@ -19,6 +19,15 @@ from backend.core.providers.browser.browser_session_manager import (
 from backend.core.providers.browser.playwright_browser_provider import (
     PlaywrightBrowserProvider,
 )
+from backend.core.providers.desktop.desktop_provider import (
+    DesktopProvider,
+)
+from backend.core.providers.desktop.desktop_session_manager import (
+    DesktopSessionManager,
+)
+from backend.core.providers.desktop.pywinauto_desktop_provider import (
+    PywinautoDesktopProvider,
+)
 from backend.core.tools.manager import ToolManager
 from backend.core.tools.tool import Tool
 from backend.tools.browser.click_tool import ClickTool
@@ -44,6 +53,36 @@ from backend.tools.browser.upload_file_tool import (
     UploadFileTool,
 )
 from backend.tools.browser.wait_tool import WaitTool
+from backend.tools.desktop.click_at_tool import ClickAtTool
+from backend.tools.desktop.click_element_tool import (
+    ClickElementTool,
+)
+from backend.tools.desktop.connect_window_tool import (
+    ConnectWindowTool,
+)
+from backend.tools.desktop.drag_tool import DragTool
+from backend.tools.desktop.extract_structured_tool import (
+    ExtractStructuredTool as DesktopExtractStructuredTool,
+)
+from backend.tools.desktop.get_element_text_tool import (
+    GetElementTextTool,
+)
+from backend.tools.desktop.launch_app_tool import LaunchAppTool
+from backend.tools.desktop.list_windows_tool import (
+    ListWindowsTool,
+)
+from backend.tools.desktop.move_mouse_tool import MoveMouseTool
+from backend.tools.desktop.press_key_tool import (
+    PressKeyTool as DesktopPressKeyTool,
+)
+from backend.tools.desktop.screenshot_tool import (
+    ScreenshotTool as DesktopScreenshotTool,
+)
+from backend.tools.desktop.scroll_at_tool import ScrollAtTool
+from backend.tools.desktop.type_into_element_tool import (
+    TypeIntoElementTool,
+)
+from backend.tools.desktop.type_text_tool import TypeTextTool
 from backend.tools.filesystem.read_file_tool import (
     ReadFileTool,
 )
@@ -63,6 +102,7 @@ class BuiltinToolFactory:
         self,
         *,
         browser_provider: BrowserProvider | None = None,
+        desktop_provider: DesktopProvider | None = None,
         engine_config: EngineConfig | None = None,
     ) -> None:
         #
@@ -89,6 +129,14 @@ class BuiltinToolFactory:
             provider=provider,
         )
 
+        self._desktop_sessions = DesktopSessionManager(
+            provider=(
+                desktop_provider
+                if desktop_provider is not None
+                else PywinautoDesktopProvider()
+            ),
+        )
+
     # ------------------------------------------------------------------
     # Browser lifecycle
     # ------------------------------------------------------------------
@@ -109,6 +157,20 @@ class BuiltinToolFactory:
         return self._browser_sessions
 
     # ------------------------------------------------------------------
+    # Desktop lifecycle
+    # ------------------------------------------------------------------
+
+    @property
+    def desktop_sessions(
+        self,
+    ) -> DesktopSessionManager:
+        """
+        Shared desktop session manager used by every desktop tool.
+        """
+
+        return self._desktop_sessions
+
+    # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
 
@@ -119,6 +181,7 @@ class BuiltinToolFactory:
         Create all built-in tools.
         """
         sessions = self._browser_sessions
+        desktop = self._desktop_sessions
 
         return (
             EchoTool(),
@@ -137,6 +200,20 @@ class BuiltinToolFactory:
             WaitTool(sessions=sessions),
             UploadFileTool(sessions=sessions),
             DownloadTool(sessions=sessions),
+            ListWindowsTool(sessions=desktop),
+            ConnectWindowTool(sessions=desktop),
+            LaunchAppTool(sessions=desktop),
+            ClickElementTool(sessions=desktop),
+            TypeIntoElementTool(sessions=desktop),
+            GetElementTextTool(sessions=desktop),
+            DesktopExtractStructuredTool(sessions=desktop),
+            ClickAtTool(sessions=desktop),
+            MoveMouseTool(sessions=desktop),
+            DragTool(sessions=desktop),
+            ScrollAtTool(sessions=desktop),
+            TypeTextTool(sessions=desktop),
+            DesktopPressKeyTool(sessions=desktop),
+            DesktopScreenshotTool(sessions=desktop),
         )
 
     # ------------------------------------------------------------------
