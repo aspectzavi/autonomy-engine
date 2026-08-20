@@ -6,6 +6,10 @@ langgraph
 
 playwright
 
+pywinauto
+pyautogui
+pillow
+
 pydantic>=2.10
 pydantic-settings
 
