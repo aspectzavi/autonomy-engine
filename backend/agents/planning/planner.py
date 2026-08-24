@@ -17,6 +17,9 @@ from __future__ import annotations
 from backend.core.agents.context import AgentContext
 from backend.core.agents.goal import Goal
 from backend.core.agents.planner import AgentPlanner
+from backend.core.capabilities.capability_registry import (
+    CapabilityRegistry,
+)
 from backend.core.planning.execution_plan import ExecutionPlan
 from backend.core.planning.memory_analyzer import (
     PlanningMemoryAnalyzer,
@@ -46,6 +49,7 @@ class RuleBasedAgentPlanner(AgentPlanner):
         reasoning_engine: ReasoningEngine,
         analyzer: PlanningMemoryAnalyzer | None = None,
         policy: PlanningPolicy | None = None,
+        capability_registry: CapabilityRegistry | None = None,
     ) -> None:
         self._reasoning_engine = reasoning_engine
 
@@ -56,7 +60,9 @@ class RuleBasedAgentPlanner(AgentPlanner):
 
         self._policy = (
             policy
-            or RuleBasedPlanningPolicy()
+            or RuleBasedPlanningPolicy(
+                capability_registry=capability_registry,
+            )
         )
 
     # ------------------------------------------------------------------

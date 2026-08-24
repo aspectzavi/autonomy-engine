@@ -14,6 +14,9 @@ from __future__ import annotations
 
 from backend.core.agents.context import AgentContext
 from backend.core.agents.goal import Goal
+from backend.core.capabilities.capability_registry import (
+    CapabilityRegistry,
+)
 from backend.core.planning.execution_plan import (
     ExecutionPlan,
 )
@@ -26,8 +29,8 @@ from backend.core.planning.planning_insights import (
 from backend.core.planning.planning_policy import (
     PlanningPolicy,
 )
-from backend.core.planning.rule_based_capability_selector import (
-    RuleBasedCapabilitySelector,
+from backend.core.planning.registry_aware_capability_selector import (
+    RegistryAwareCapabilitySelector,
 )
 from backend.core.reasoning.reasoning_result import (
     ReasoningResult,
@@ -41,11 +44,31 @@ class RuleBasedPlanningPolicy(
     Default deterministic planning policy.
     """
 
+    #
+    # The abstract placeholder capabilities this policy always knows
+    # how to name/describe. Anything else is treated as a real,
+    # registered capability (a tool), and gets the goal's metadata
+    # passed through as its execution arguments.
+    #
+    _ABSTRACT_CAPABILITIES = frozenset(
+        {
+            "goal.execute",
+            "goal.verify",
+            "memory.search",
+            "reasoning.analyze",
+            "user.ask",
+        },
+    )
+
     def __init__(
         self,
+        *,
+        capability_registry: CapabilityRegistry | None = None,
     ) -> None:
         self._selector = (
-            RuleBasedCapabilitySelector()
+            RegistryAwareCapabilitySelector(
+                capability_registry=capability_registry,
+            )
         )
 
     # ------------------------------------------------------------------
@@ -55,7 +78,7 @@ class RuleBasedPlanningPolicy(
     @property
     def selector(
         self,
-    ) -> RuleBasedCapabilitySelector:
+    ) -> RegistryAwareCapabilitySelector:
         """
         Capability selector.
         """
@@ -192,6 +215,12 @@ class RuleBasedPlanningPolicy(
                 goal.description,
             ),
             capability=capability,
+            arguments=(
+                dict(goal.metadata)
+                if capability
+                not in self._ABSTRACT_CAPABILITIES
+                else {}
+            ),
         )
 
     # ------------------------------------------------------------------

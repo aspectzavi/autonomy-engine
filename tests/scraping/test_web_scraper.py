@@ -21,6 +21,15 @@ def _linked_pages(count: int) -> dict:
     """
     Build `count` pages, each linking to the next via a "Next" link,
     the last page having no next link.
+
+    Links are duplicated into both `structured["links"]` (what
+    ScrapedPage.from_structured() reads, mirroring the real
+    extract_structured() JS output shape) and the top-level `links`
+    key (what ScriptedBrowserProvider.extract_links() reads) -- the
+    real Playwright provider populates both from the same underlying
+    page DOM, so the fixture needs to match that shape for
+    WebScraper's post-page-1 empty-links safety check to behave the
+    same way it does against a real page.
     """
 
     pages = {}
@@ -29,13 +38,18 @@ def _linked_pages(count: int) -> dict:
         url = f"https://site.com/{i}"
         next_url = f"https://site.com/{i + 1}" if i < count else None
 
+        links = (
+            [{"href": next_url, "text": "Next", "rel": "next"}]
+            if next_url
+            else []
+        )
+
         pages[url] = {
-            "structured": {"title": f"Page {i}"},
-            "links": (
-                [{"href": next_url, "text": "Next", "rel": "next"}]
-                if next_url
-                else []
-            ),
+            "structured": {
+                "title": f"Page {i}",
+                "links": links,
+            },
+            "links": links,
         }
 
     return pages
@@ -105,6 +119,9 @@ async def test_stops_on_cycle_back_to_a_visited_page() -> None:
     pages["https://site.com/2"]["links"] = [
         {"href": "https://site.com/1", "text": "Next", "rel": "next"},
     ]
+    pages["https://site.com/2"]["structured"]["links"] = [
+        {"href": "https://site.com/1", "text": "Next", "rel": "next"},
+    ]
 
     provider = ScriptedBrowserProvider(pages=pages)
     scraper = WebScraper(provider=provider)
@@ -123,7 +140,12 @@ async def test_stops_on_navigation_failure() -> None:
     provider = ScriptedBrowserProvider(
         pages={
             "https://site.com/1": {
-                "structured": {"title": "Page 1"},
+                "structured": {
+                    "title": "Page 1",
+                    "links": [
+                        {"href": "https://site.com/missing", "text": "Next", "rel": "next"},
+                    ],
+                },
                 "links": [
                     {"href": "https://site.com/missing", "text": "Next", "rel": "next"},
                 ],
