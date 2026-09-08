@@ -16,7 +16,7 @@ test:
 	pytest
 
 run:
-	uvicorn backend.main:app --reload
+	uvicorn backend.app.api.application:app --reload
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

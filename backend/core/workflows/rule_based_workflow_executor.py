@@ -60,6 +60,7 @@ class RuleBasedWorkflowExecutor(
         completed_batches = 0
         completed_tasks = 0
         failed_tasks = 0
+        errors: list[str] = []
 
         #
         # Build a lookup table for workflow nodes.
@@ -101,6 +102,7 @@ class RuleBasedWorkflowExecutor(
                     BaseException,
                 ):
                     failed_tasks += 1
+                    errors.append(str(outcome))
                     continue
 
                 result: TaskResult = outcome
@@ -109,6 +111,8 @@ class RuleBasedWorkflowExecutor(
                     completed_tasks += 1
                 else:
                     failed_tasks += 1
+                    if result.error:
+                        errors.append(result.error)
 
             completed_batches += 1
 
@@ -124,6 +128,7 @@ class RuleBasedWorkflowExecutor(
                 "strategy": (
                     "batch_parallel"
                 ),
+                "errors": errors,
             },
         )
 

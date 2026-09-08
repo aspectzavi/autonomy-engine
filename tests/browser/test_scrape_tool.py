@@ -19,13 +19,41 @@ def _pages(count: int) -> dict:
     for i in range(1, count + 1):
         url = f"https://site.com/{i}"
         next_url = f"https://site.com/{i + 1}" if i < count else None
+        links = (
+            [{"href": next_url, "text": "Next", "rel": "next"}]
+            if next_url
+            else []
+        )
         pages[url] = {
-            "structured": {"title": f"Page {i}"},
-            "links": (
-                [{"href": next_url, "text": "Next", "rel": "next"}]
-                if next_url
-                else []
-            ),
+            "structured": {
+                "title": f"Page {i}",
+                "links": links,
+            },
+            "links": links,
+        }
+    return pages
+
+
+def _query_paginated_pages(count: int) -> dict:
+    """
+    Pages addressed by a ``?page=N`` query string, matching the
+    "auto" pagination mode's default URL template
+    ("https://site.com/listing?page={page}").
+    """
+    pages = {}
+    for i in range(1, count + 1):
+        url = (
+            "https://site.com/listing"
+            if i == 1
+            else f"https://site.com/listing?page={i}"
+        )
+        pages[url] = {
+            "structured": {
+                "title": f"Page {i}",
+                "links": [],
+                "text": f"Listing page {i} with several products shown here.",
+            },
+            "links": [],
         }
     return pages
 
@@ -59,7 +87,29 @@ async def test_single_page_scrape() -> None:
 
 
 @pytest.mark.asyncio
-async def test_multi_page_scrape_defaults_to_next_link() -> None:
+async def test_multi_page_scrape_defaults_to_auto_page_pagination() -> None:
+    sessions = BrowserSessionManager(
+        provider=ScriptedBrowserProvider(
+            pages=_query_paginated_pages(3),
+        ),
+    )
+    tool = ScrapeTool(sessions=sessions)
+
+    result = await tool.execute(
+        ToolContext(
+            arguments={
+                "url": "https://site.com/listing",
+                "max_pages": 3,
+            },
+        ),
+    )
+
+    assert result.success
+    assert result.output["page_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_multi_page_scrape_with_explicit_next_link() -> None:
     sessions = BrowserSessionManager(
         provider=ScriptedBrowserProvider(pages=_pages(3)),
     )
@@ -70,6 +120,7 @@ async def test_multi_page_scrape_defaults_to_next_link() -> None:
             arguments={
                 "url": "https://site.com/1",
                 "max_pages": 3,
+                "pagination": "next_link",
             },
         ),
     )

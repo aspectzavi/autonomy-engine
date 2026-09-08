@@ -40,6 +40,7 @@ from backend.core.observability.events import EventBus
 from backend.core.observability.tracing import Tracing
 from backend.core.observability.logger import KernelLogger
 from backend.core.config.config import EngineConfig
+from backend.core.config.filesystem import FilesystemConfig
 from backend.core.config.loader import ConfigurationLoader
 from backend.core.services.tool_service import ToolService
 from backend.core.services.agent_service import (
@@ -97,6 +98,29 @@ class KernelBootstrap:
         self._container.register_instance(
             Tracing,
             self._tracing,
+        )
+
+        #
+        # Registered as a real instance, not left to DI
+        # auto-construction: FilesystemConfig is a concrete
+        # dataclass, so an unregistered FilesystemConfig dependency
+        # doesn't fail cleanly the way an unregistered ABC (like
+        # BrowserProvider) does -- the resolver successfully
+        # auto-constructs one, but recursively "resolves" each of
+        # its own primitive-typed fields too (str, bool), and since
+        # bare str()/bool() succeed trivially (yielding '' and
+        # False), every field silently comes out wrong instead of
+        # using the dataclass's real defaults. Registering the
+        # real, correctly-configured instance here is what makes
+        # BuiltinToolFactory's `filesystem_config is not None`
+        # fallback logic actually mean something.
+        #
+        self._container.register_instance(
+            FilesystemConfig,
+            FilesystemConfig(
+                create_missing_directories=True,
+                overwrite_existing_files=True,
+            ),
         )
 
         register_runtime_services(

@@ -5,7 +5,8 @@ Deterministic multi-page crawl orchestrator: given a start URL and an
 optional pagination strategy, visits pages one at a time, extracts a
 generic structured summary of each (title, headings, text, links,
 images, tables), and stops on max_pages, a missing next page, a
-repeated URL (cycle detection), or a page that fails to load.
+repeated URL (cycle detection), an empty follow-up page, or a page
+that fails to load.
 
 No LLM call happens anywhere in this loop -- an agent decides once
 what to scrape (a URL, a pagination strategy, how many pages) and this
@@ -17,6 +18,7 @@ scrape needs to cover.
 from __future__ import annotations
 
 import asyncio
+from urllib.parse import urlsplit, urlunsplit
 
 from backend.core.providers.browser.browser_provider import (
     BrowserProvider,
@@ -28,6 +30,22 @@ from backend.core.scraping.pagination_strategy import (
     PaginationStrategy,
 )
 from backend.core.scraping.scraped_page import ScrapedPage
+
+
+def _normalize_url(url: str) -> str:
+    """
+    Normalize a URL for cycle detection.
+
+    Strips fragments and a trailing slash on the path (except root)
+    so ``/smartphones`` and ``/smartphones/`` count as the same page.
+    """
+    parts = urlsplit(url.strip())
+    path = parts.path or "/"
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    return urlunsplit(
+        (parts.scheme.casefold(), parts.netloc.casefold(), path, parts.query, ""),
+    )
 
 
 class WebScraper:
@@ -122,20 +140,19 @@ class WebScraper:
         visited: set[str] = set()
 
         url: str | None = start_url
+        previous_link_count: int | None = None
 
         for page_number in range(1, max_pages + 1):
             if url is None:
                 break
 
-            if url in visited:
-                #
-                # Cycle detected (pagination looped back to an
-                # already-visited page) -- stop rather than crawl
-                # forever.
-                #
+            normalized = _normalize_url(url)
+
+            if normalized in visited:
+                # Cycle / redirect back to an already-seen page.
                 break
 
-            visited.add(url)
+            visited.add(normalized)
 
             nav_result = await self._provider.navigate(
                 session,
@@ -152,6 +169,20 @@ class WebScraper:
                 )
                 break
 
+            # Prefer the post-navigation URL (handles redirects).
+            landed_url = getattr(session, "url", None) or url
+            landed_normalized = _normalize_url(str(landed_url))
+
+            if (
+                landed_normalized != normalized
+                and landed_normalized in visited
+            ):
+                # Redirected into a page we already scraped.
+                break
+
+            if landed_normalized not in visited:
+                visited.add(landed_normalized)
+
             extract_result = (
                 await self._provider.extract_structured(
                     session,
@@ -161,7 +192,7 @@ class WebScraper:
             if not extract_result.success:
                 pages.append(
                     ScrapedPage.failed(
-                        url,
+                        str(landed_url),
                         extract_result.error
                         or "Extraction failed.",
                     ),
@@ -173,22 +204,50 @@ class WebScraper:
             if not isinstance(structured, dict):
                 pages.append(
                     ScrapedPage.failed(
-                        url,
+                        str(landed_url),
                         "Extraction returned unexpected data.",
                     ),
                 )
                 break
 
-            pages.append(
-                ScrapedPage.from_structured(
-                    url,
-                    structured,
-                ),
+            page = ScrapedPage.from_structured(
+                str(landed_url),
+                structured,
             )
+            pages.append(page)
 
-            reached_page_limit = (
-                page_number == max_pages
-            )
+            link_count = len(page.links) if page.links else 0
+            text_length = len(page.text.strip()) if page.text else 0
+
+            # After page 1: stop if the page looks like an empty
+            # past-the-end shell -- both no links AND barely any
+            # text. Checking links alone is too easily wrong: a real
+            # listing page can legitimately have zero anchor-style
+            # links (e.g. cards rendered without <a> tags) while
+            # still holding real content, especially with
+            # UrlPatternPaginationStrategy, which computes the next
+            # URL from a template regardless of what's on the page.
+            if (
+                page_number > 1
+                and link_count == 0
+                and text_length < 40
+            ):
+                break
+
+            if (
+                page_number > 1
+                and previous_link_count is not None
+                and link_count > 0
+                and link_count == previous_link_count
+                and _normalize_url(str(landed_url))
+                == _normalize_url(pages[-2].url)
+            ):
+                # Same URL content twice -- nothing new.
+                break
+
+            previous_link_count = link_count
+
+            reached_page_limit = page_number == max_pages
 
             if pagination is None or reached_page_limit:
                 break
@@ -199,7 +258,7 @@ class WebScraper:
             url = await pagination.next_url(
                 provider=self._provider,
                 session=session,
-                current_url=url,
+                current_url=str(landed_url),
                 page_number=page_number,
             )
 

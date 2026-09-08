@@ -17,6 +17,9 @@ from backend.agents.planning.planner import (
     RuleBasedAgentPlanner,
 )
 from backend.core.agents.agent import Agent
+from backend.core.capabilities.capability_registry import (
+    CapabilityRegistry,
+)
 from backend.core.memory.experience_recorder import (
     ExperienceRecorder,
 )
@@ -58,6 +61,7 @@ class PlanningAgent(Agent):
         reasoning_engine: ReasoningEngine,
         experience_recorder: ExperienceRecorder,
         optimizer: PlanOptimizer | None = None,
+        capability_registry: CapabilityRegistry | None = None,
     ) -> None:
         self._reasoning_engine = reasoning_engine
 
@@ -67,6 +71,7 @@ class PlanningAgent(Agent):
 
         planner = RuleBasedAgentPlanner(
             reasoning_engine=reasoning_engine,
+            capability_registry=capability_registry,
         )
 
         super().__init__(

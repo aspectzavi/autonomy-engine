@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from backend.core.kernel.metadata import ServiceMetadata
 from backend.core.kernel.service import KernelService
+from backend.core.capabilities.capability_registry import (
+    CapabilityRegistry,
+)
+from backend.core.capabilities.tool_capability_provider import (
+    ToolCapabilityProvider,
+)
 from backend.core.tools.executor import ToolExecutor
 from backend.core.tools.manager import ToolManager
 from backend.core.tools.registry import ToolRegistry
@@ -24,6 +30,7 @@ class ToolService(KernelService):
         *,
         manager: ToolManager | None = None,
         factory: BuiltinToolFactory | None = None,
+        capability_registry: CapabilityRegistry | None = None,
     ) -> None:
         super().__init__(
             metadata=ServiceMetadata(
@@ -39,6 +46,9 @@ class ToolService(KernelService):
         self._factory = (
             factory
             or BuiltinToolFactory()
+        )
+        self._capability_registry = (
+            capability_registry
         )
 
     # ------------------------------------------------------------------
@@ -79,7 +89,15 @@ class ToolService(KernelService):
 
     async def on_start(self) -> None:
         """
-        Register built-in tools.
+        Register built-in tools, and expose them as capabilities.
+
+        Registration into CapabilityRegistry happens here, after
+        tools are registered, rather than at construction time --
+        CapabilityRegistry.register() snapshots `provider.
+        capabilities` once, and no tool exists yet when ToolService
+        is constructed (they're only added by register_all() below).
+        Guarded by name so restarting the runtime doesn't attempt a
+        duplicate registration.
         """
         self.factory.register_all(
             self.manager,
@@ -89,6 +107,21 @@ class ToolService(KernelService):
             "Registered %d tools.",
             len(self.registry),
         )
+
+        if self._capability_registry is not None:
+            provider_names = {
+                provider.name
+                for provider in (
+                    self._capability_registry.providers
+                )
+            }
+
+            if "tools" not in provider_names:
+                self._capability_registry.register(
+                    ToolCapabilityProvider(
+                        tool_manager=self.manager,
+                    ),
+                )
 
     async def on_stop(self) -> None:
         """

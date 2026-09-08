@@ -8,9 +8,9 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 295 passed, 0 failed
+- Tests: 325 passed, 0 failed
 - Ruff: PASS
-- Mypy (strict): PASS — 470 source files
+- Mypy (strict): PASS — 464 source files
 
 ---
 
@@ -171,7 +171,7 @@ Remaining
 
 Status
 
-55%
+75%
 
 Completed
 
@@ -180,54 +180,126 @@ Completed
 - AgentRegistry, AgentManager, AgentFactory
 - PlanningAgent (concrete built-in agent) + RuleBasedAgentPlanner
 - AgentContext, Goal, AgentResult, AgentState
-- Verified end-to-end: bootstrap -> agent_service -> manager.execute()
-  -> reasoning pipeline -> planning -> optimization -> compilation ->
-  workflow execution now genuinely runs (previously did not, see
-  critical fix below)
-- tests/agents/, tests/bootstrap/ now have real coverage (both were
-  empty stub files before this session — zero lines of test code
-  existed for the composition root or for AgentManager)
+- tests/agents/, tests/bootstrap/ have real coverage (previous
+  session; both were empty stub files before then)
+- Cleaned up this session: deleted `backend/agents/base.py`,
+  `backend/agents/registry.py` (empty duplicate-name stubs shadowing
+  the real `backend/core/agents/` versions), and the entire
+  `backend/agents/execution/` folder (6 empty stub files — engine,
+  scheduler, runner, retry, checkpoint, session — whose job is
+  already done by the now-solid Workflow/Task subsystems; building
+  a second, parallel execution/retry/checkpoint layer at the agent
+  level would have directly duplicated `WorkflowRuntimePipeline` and
+  `DefaultWorkflowResilience`/`DefaultWorkflowRecovery`)
 
-### Critical fix this session
+### Keystone fix this session: Agents were never actually connected to Tools
 
-`AgentService` — the live service everything calls — booted with
-**zero registered agents**, every time, silently. Root causes (two
-separate bugs, both in the same class as the earlier WorkflowRuntime
-fix):
+Every previous session's live test of `PlanningAgent` ended in
+"Unknown capability 'goal.execute'" — logged at the time as proof the
+*orchestration* worked, which it did, but the underlying cause had
+never been root-caused. It turned out to be the single biggest
+remaining gap in the whole engine: **the 30 real, working, tested
+tools built across the Browser and Desktop Runtime sessions were
+completely unreachable from any agent.**
 
-1. `KernelBootstrap.__init__` resolved `AgentService` before
-   `register_agents()` / `create_agent_factory()` ever ran, so
-   `AgentService` auto-constructed its own private, disconnected,
-   empty `AgentManager`. Fixed by moving agent registration +
-   built-in agent construction before `AgentService` is resolved.
-2. Even after fixing (1), agents still didn't show up:
-   `AgentManager.__init__` used `registry or AgentRegistry()`.
-   `AgentRegistry` defines `__len__`, so an injected-but-*empty*
-   registry evaluates as falsy in Python and was silently discarded
-   in favor of a brand-new, disconnected registry — even though DI
-   had correctly injected the right (shared, singleton) one. Fixed
-   by switching to an explicit `is None` check. Found the identical
-   latent bug in `ToolManager` (currently harmless, since nothing
-   else resolves `ToolRegistry` independently yet) and fixed it
-   proactively too.
+Two disconnected halves, now joined:
 
-Confirmed via a live end-to-end run: agent count went from 0 -> 1
-("planning"), and `manager.execute(agent="planning", goal=...)` ran
-the full pipeline through to a real (correctly-failing-on-unknown-
-capability) `AgentResult`, proving the whole chain — reasoning,
-planning, optimization, compilation, workflow execution, experience
-recording — is actually wired end-to-end for the first time.
+1. `CapabilityRegistry` — the exact same shape as `BrowserProvider`/
+   `DesktopProvider` (a `.execute(capability, arguments)` interface)
+   — was registered in the container but **never populated with
+   anything**. Fixed with a new `ToolCapabilityProvider` adapter
+   that exposes every registered tool as a capability (queried live
+   from `ToolManager`, not snapshotted, since tools aren't
+   registered until `ToolService.on_start()` runs — after
+   `CapabilityRegistry` itself is constructed). Registered at the
+   end of `ToolService.on_start()`, guarded so a runtime restart
+   doesn't attempt double-registration.
+2. Even with real capabilities registered, `RuleBasedCapabilitySelector`
+   never asked for them by name — it only ever emitted a fixed
+   abstract placeholder set (`goal.execute`, `goal.verify`,
+   `memory.search`, ...), regardless of what the goal actually said
+   or what tools existed. Fixed with a new
+   `RegistryAwareCapabilitySelector` (subclasses the existing
+   selector, so all prior behavior is preserved as a fallback): does
+   simple keyword-overlap matching between the goal's description
+   and each registered capability's name+description, and routes to
+   the real capability when it scores above a minimum shared-token
+   threshold. Deliberately not NLU or an LLM call — consistent with
+   every other "RuleBased" component in this codebase and the
+   project's stated low-token-cost goal. Threaded through
+   `PlanningAgent` -> `RuleBasedAgentPlanner` -> `RuleBasedPlanningPolicy`
+   -> selector via constructor injection of the same `CapabilityRegistry`
+   singleton `ToolCapabilityProvider` populates.
+3. `PlanStep` now carries `goal.metadata` as execution arguments for
+   real (non-abstract) capabilities, so a goal can supply concrete
+   parameters (e.g. `Goal(description="navigate to a url",
+   metadata={"url": "https://example.com"})`) that flow all the way
+   through to the actual tool call.
+
+**Verified live, for real, for the first time ever**: a goal with no
+special-casing — `Goal(description="navigate browser to a URL",
+metadata={"url": "https://example.com"})` — executed through
+`bootstrap.agent_service.execute(agent="planning", goal=...)` and
+came back `success=True`, having genuinely reasoned, selected
+`browser_navigate` by keyword match, compiled it into a workflow, and
+launched a real Chromium browser to the real URL (confirmed by a
+10-second scheduled-to-executed gap in the logs, consistent with an
+actual browser launch, not a mock).
+
+### Unrelated bugs found and fixed while verifying this
+
+Two pre-existing scraping test failures surfaced while running the
+full suite during this work — both traced to legitimate improvements
+made in an earlier, uncommitted session (live-debugging a real Jumia
+scrape) that were never fully reconciled with the test suite:
+
+- `WebScraper`'s new "stop if a page looks like an empty past-the-end
+  shell" heuristic checked `link_count == 0` alone, which misfires on
+  `UrlPatternPaginationStrategy` crawls (computes next-page URLs from
+  a template regardless of whether the current page has any anchor-
+  tag links) and on any legitimate content page with zero extracted
+  links. Fixed by requiring **both** zero links **and** near-empty
+  text (a real empty shell has neither) before stopping.
+- The affected test fixtures put pagination `links` in a different
+  place than `ScrapedPage.from_structured()` actually reads them
+  from (a fixture-shape mismatch, not a scraper bug) — fixed the
+  fixtures, and added a second explicit test so both the new "auto"
+  URL-pattern default and the explicit `next_link` mode have
+  coverage.
+
+Neither of these was part of this session's Agents work; both are
+noted here because fixing them was necessary to get a clean baseline
+before verifying the capability-wiring fix.
+
+New tests this session: `tests/capabilities/test_tool_capability_provider.py`
+(6 tests: live capability reflection, execution delegation, tool
+failure -> capability failure, unknown capability handling) and
+`tests/planning/test_registry_aware_capability_selector.py` (5 tests:
+placeholder fallback with no registry, fallback when nothing matches
+well enough, real-capability match overriding the placeholder,
+best-match-among-several, non-"execute" decisions left untouched).
 
 Remaining
 
 - Only one concrete agent exists (PlanningAgent). browser/, desktop/,
-  memory/, reviewer/, vision/ agent subpackages are empty stubs
-  (`__init__.py` only)
-- backend/agents/execution/ (engine, scheduler, runner, retry,
-  checkpoint, session) is entirely empty stub files
-- No test coverage yet for the "unknown capability" failure path or
-  for Agent.execute()'s success path with a goal that resolves to a
-  real registered tool
+  memory/, reviewer/, vision/ agent subpackages under
+  `backend/agents/` are still empty stubs (`__init__.py` only) —
+  though with the capability-wiring fix, `PlanningAgent` can now
+  reach any of the 30 tools generically, so a dedicated `BrowserAgent`/
+  `DesktopAgent` class may not be a real gap so much as an
+  organizational nicety
+- Keyword matching is simple token overlap, not true intent
+  understanding — a goal has to share actual words with a
+  capability's name/description to route correctly, same honesty
+  caveat as `HashingEmbeddingProvider` in Memory
+- `goal.metadata` is the only way to pass real arguments to a matched
+  tool (e.g. `url` for `browser_navigate`) — there's no automatic
+  extraction of arguments from the goal's natural-language
+  description (e.g. pulling a URL out of free text)
+- No test coverage yet for a goal that keyword-matches to nothing
+  (falls through to `goal.execute`) actually being handled
+  gracefully end-to-end, only unit-level coverage of the selector
+  itself falling back correctly
 
 ---
 
@@ -519,6 +591,90 @@ Remaining
 
 Status
 
-20%
+45%
+
+Completed — first real implementation this session (was five empty
+stub folders: `backend/infrastructure/browser`, `cache`, `database`,
+`filesystem`, `persistence`)
+
+- Scoped deliberately: rather than building the vaguer pieces
+  (cache, database) with no current consumer, focused on what the
+  project owner's actual usage (scraping, running long automations)
+  needs — durable, sandboxed file output, and a real way to invoke
+  the engine at all.
+- Filesystem: 7 previously-empty tool stubs built (`write_file`,
+  `append_file`, `list_directory`, `create_directory`, `delete_file`,
+  `copy_file`, `move_file`) on top of the already-solid
+  `FilesystemTool` sandbox base class and the existing `read_file`
+  tool. All wired into `BuiltinToolFactory` with a shared
+  `FilesystemConfig` (permissive create/overwrite defaults; the real
+  safety boundary is the workspace jail — no absolute paths, no
+  symlinks, every path resolved and checked against the workspace
+  root — not the write-mode conveniences).
+- `run.py`: a real CLI entry point. `tool <name> --args-file <file>`
+  calls a specific tool directly (predictable, recommended for real
+  work); `goal "<description>" --meta-file <file>` submits a
+  natural-language goal through the planning agent (experimental,
+  keyword-matched). `--args-file` exists because inline JSON on
+  Windows fights cmd/PowerShell quote-escaping badly enough to be
+  worth avoiding entirely.
+- Picked up from earlier in this session (previously uncommitted):
+  a `POST /agents/execute` HTTP endpoint on the FastAPI app, letting
+  a goal be submitted over HTTP instead of only through Python/CLI,
+  plus `examples/execute_goal.py` demonstrating it, plus a fix in
+  `Agent.execute()` so a failed workflow surfaces the real underlying
+  tool error instead of a generic "Workflow execution failed" with
+  no detail.
+
+### Bug found and fixed this session (same class as prior sessions' DI bugs)
+
+`FilesystemConfig` is a concrete dataclass, unlike `BrowserProvider`/
+`DesktopProvider` (abstract classes). An unregistered
+`FilesystemConfig` dependency doesn't fail cleanly the way an
+unregistered ABC does — the DI container successfully
+auto-constructs one, but recursively "resolves" each of its own
+primitive-typed fields too (`str`, `bool`), and bare `str()`/`bool()`
+succeed trivially (yielding `''` and `False`) instead of using the
+dataclass's real field defaults. This silently broke every
+filesystem tool: `write_file` failed with `unknown encoding: ''`,
+and overwrite protection was always forced on regardless of
+configuration. Fixed by registering a real, correctly-configured
+`FilesystemConfig` instance in `KernelBootstrap`, the same pattern
+already used for `EngineConfig`/`Tracing`/`KernelLogger`.
+
+Verified live twice: (1) `run.py tool --list` shows all 37 registered
+tools; (2) `run.py tool write_file --args-file ...` produces a real
+file with real content and the correct encoding.
+
+New `tests/filesystem/`: real file I/O tests using a temp workspace
+per test (write/read round-trip, overwrite-disabled enforcement,
+missing arguments, append, list flat/recursive, create-directory
+idempotency, delete, copy, move, sandbox-escape prevention for both
+absolute paths and path traversal), plus two bootstrap-level
+regression tests — one proving `FilesystemConfig` resolves to the
+real registered instance rather than DI-auto-constructed garbage,
+one proving `write_file` works end-to-end through a fully booted
+system.
+
+Remaining
+
+- **Persistence**: everything is still in-memory-only. Workflow
+  checkpoints (`InMemoryCheckpointStore`) and memory/vector storage
+  (`InMemoryVectorStore`) both disappear the moment a process exits.
+  A SQLite-backed implementation of each (swapping the registered
+  implementation, same pattern as `MemoryStore` -> `VectorMemory`)
+  was planned this session but not built — the single biggest
+  remaining Infrastructure gap.
+- **Cache, database**: untouched by design — no current consumer
+  needs them; would be speculative work without a concrete use case
+- No config-loader wiring for `FilesystemConfig` (unlike Browser
+  Runtime's `EngineConfig.browser` — `FilesystemConfig`'s permissive
+  defaults are hardcoded in `BuiltinToolFactory`, not sourced from
+  `EngineConfig`)
+- `run.py`'s `goal` mode inherits the same honesty caveat as the
+  Agents subsystem: keyword matching, not true intent understanding
+- The HTTP endpoint (`POST /agents/execute`) has no test coverage
+  yet — picked up as pre-existing uncommitted work this session, not
+  independently verified beyond a live manual check
 
 ---

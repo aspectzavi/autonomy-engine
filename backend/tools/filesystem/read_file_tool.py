@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from backend.core.config.filesystem import FilesystemConfig
 from backend.core.tools.context import ToolContext
 from backend.core.tools.result import ToolResult
 from backend.tools.filesystem.base import (
@@ -20,10 +21,15 @@ class ReadFileTool(FilesystemTool):
     Read a UTF-8 text file.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        config: FilesystemConfig | None = None,
+    ) -> None:
         super().__init__(
             name="read_file",
             description="Read a text file.",
+            config=config,
         )
 
     # ------------------------------------------------------------------
