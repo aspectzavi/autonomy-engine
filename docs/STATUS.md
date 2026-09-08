@@ -8,7 +8,7 @@ Last Updated
 
 ## Quality Baseline
 
-- Tests: 307 passed, 0 failed
+- Tests: 325 passed, 0 failed
 - Ruff: PASS
 - Mypy (strict): PASS — 464 source files
 
@@ -591,6 +591,90 @@ Remaining
 
 Status
 
-20%
+45%
+
+Completed — first real implementation this session (was five empty
+stub folders: `backend/infrastructure/browser`, `cache`, `database`,
+`filesystem`, `persistence`)
+
+- Scoped deliberately: rather than building the vaguer pieces
+  (cache, database) with no current consumer, focused on what the
+  project owner's actual usage (scraping, running long automations)
+  needs — durable, sandboxed file output, and a real way to invoke
+  the engine at all.
+- Filesystem: 7 previously-empty tool stubs built (`write_file`,
+  `append_file`, `list_directory`, `create_directory`, `delete_file`,
+  `copy_file`, `move_file`) on top of the already-solid
+  `FilesystemTool` sandbox base class and the existing `read_file`
+  tool. All wired into `BuiltinToolFactory` with a shared
+  `FilesystemConfig` (permissive create/overwrite defaults; the real
+  safety boundary is the workspace jail — no absolute paths, no
+  symlinks, every path resolved and checked against the workspace
+  root — not the write-mode conveniences).
+- `run.py`: a real CLI entry point. `tool <name> --args-file <file>`
+  calls a specific tool directly (predictable, recommended for real
+  work); `goal "<description>" --meta-file <file>` submits a
+  natural-language goal through the planning agent (experimental,
+  keyword-matched). `--args-file` exists because inline JSON on
+  Windows fights cmd/PowerShell quote-escaping badly enough to be
+  worth avoiding entirely.
+- Picked up from earlier in this session (previously uncommitted):
+  a `POST /agents/execute` HTTP endpoint on the FastAPI app, letting
+  a goal be submitted over HTTP instead of only through Python/CLI,
+  plus `examples/execute_goal.py` demonstrating it, plus a fix in
+  `Agent.execute()` so a failed workflow surfaces the real underlying
+  tool error instead of a generic "Workflow execution failed" with
+  no detail.
+
+### Bug found and fixed this session (same class as prior sessions' DI bugs)
+
+`FilesystemConfig` is a concrete dataclass, unlike `BrowserProvider`/
+`DesktopProvider` (abstract classes). An unregistered
+`FilesystemConfig` dependency doesn't fail cleanly the way an
+unregistered ABC does — the DI container successfully
+auto-constructs one, but recursively "resolves" each of its own
+primitive-typed fields too (`str`, `bool`), and bare `str()`/`bool()`
+succeed trivially (yielding `''` and `False`) instead of using the
+dataclass's real field defaults. This silently broke every
+filesystem tool: `write_file` failed with `unknown encoding: ''`,
+and overwrite protection was always forced on regardless of
+configuration. Fixed by registering a real, correctly-configured
+`FilesystemConfig` instance in `KernelBootstrap`, the same pattern
+already used for `EngineConfig`/`Tracing`/`KernelLogger`.
+
+Verified live twice: (1) `run.py tool --list` shows all 37 registered
+tools; (2) `run.py tool write_file --args-file ...` produces a real
+file with real content and the correct encoding.
+
+New `tests/filesystem/`: real file I/O tests using a temp workspace
+per test (write/read round-trip, overwrite-disabled enforcement,
+missing arguments, append, list flat/recursive, create-directory
+idempotency, delete, copy, move, sandbox-escape prevention for both
+absolute paths and path traversal), plus two bootstrap-level
+regression tests — one proving `FilesystemConfig` resolves to the
+real registered instance rather than DI-auto-constructed garbage,
+one proving `write_file` works end-to-end through a fully booted
+system.
+
+Remaining
+
+- **Persistence**: everything is still in-memory-only. Workflow
+  checkpoints (`InMemoryCheckpointStore`) and memory/vector storage
+  (`InMemoryVectorStore`) both disappear the moment a process exits.
+  A SQLite-backed implementation of each (swapping the registered
+  implementation, same pattern as `MemoryStore` -> `VectorMemory`)
+  was planned this session but not built — the single biggest
+  remaining Infrastructure gap.
+- **Cache, database**: untouched by design — no current consumer
+  needs them; would be speculative work without a concrete use case
+- No config-loader wiring for `FilesystemConfig` (unlike Browser
+  Runtime's `EngineConfig.browser` — `FilesystemConfig`'s permissive
+  defaults are hardcoded in `BuiltinToolFactory`, not sourced from
+  `EngineConfig`)
+- `run.py`'s `goal` mode inherits the same honesty caveat as the
+  Agents subsystem: keyword matching, not true intent understanding
+- The HTTP endpoint (`POST /agents/execute`) has no test coverage
+  yet — picked up as pre-existing uncommitted work this session, not
+  independently verified beyond a live manual check
 
 ---

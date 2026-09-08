@@ -200,6 +200,46 @@ class Agent(ABC):
                 )
             )
 
+            if not workflow_result.success:
+                workflow_errors = workflow_result.execution.metadata.get(
+                    "errors",
+                    [],
+                )
+                error = (
+                    "; ".join(
+                        str(item)
+                        for item in workflow_errors
+                    )
+                    if isinstance(workflow_errors, list)
+                    else "Workflow execution failed."
+                )
+                if not error:
+                    error = "Workflow execution failed."
+
+                if context.memory is not None:
+                    context.memory.remember(
+                        self.experience_recorder.record_failure(
+                            goal=goal.description,
+                            agent=self.name,
+                            error=error,
+                        ),
+                    )
+
+                self._state = AgentState.FAILED
+
+                return AgentResult.failure(
+                    agent=self.name,
+                    goal=goal.description,
+                    error=error,
+                    workflow_result=workflow_result,
+                    started_at=started_at,
+                    metadata={
+                        "optimization": (
+                            optimization_report.diagnostics()
+                        ),
+                    },
+                )
+
             if context.memory is not None:
                 context.memory.remember(
                     self.experience_recorder.record_success(

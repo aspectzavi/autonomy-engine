@@ -7,6 +7,7 @@ Creates and registers the framework's built-in tools.
 from __future__ import annotations
 
 from backend.core.config.config import EngineConfig
+from backend.core.config.filesystem import FilesystemConfig
 from backend.core.providers.browser.browser_config import (
     BrowserConfig,
 )
@@ -83,8 +84,29 @@ from backend.tools.desktop.type_into_element_tool import (
     TypeIntoElementTool,
 )
 from backend.tools.desktop.type_text_tool import TypeTextTool
+from backend.tools.filesystem.append_file_tool import (
+    AppendFileTool,
+)
+from backend.tools.filesystem.copy_file_tool import (
+    CopyFileTool,
+)
+from backend.tools.filesystem.create_directory_tool import (
+    CreateDirectoryTool,
+)
+from backend.tools.filesystem.delete_file_tool import (
+    DeleteFileTool,
+)
+from backend.tools.filesystem.list_directory_tool import (
+    ListDirectoryTool,
+)
+from backend.tools.filesystem.move_file_tool import (
+    MoveFileTool,
+)
 from backend.tools.filesystem.read_file_tool import (
     ReadFileTool,
+)
+from backend.tools.filesystem.write_file_tool import (
+    WriteFileTool,
 )
 from backend.tools.shell.echo_tool import EchoTool
 from backend.tools.shell.execute_command_tool import (
@@ -104,6 +126,7 @@ class BuiltinToolFactory:
         browser_provider: BrowserProvider | None = None,
         desktop_provider: DesktopProvider | None = None,
         engine_config: EngineConfig | None = None,
+        filesystem_config: FilesystemConfig | None = None,
     ) -> None:
         #
         # NOTE: `is None`, not `browser_provider or ...()`, kept
@@ -135,6 +158,25 @@ class BuiltinToolFactory:
                 if desktop_provider is not None
                 else PywinautoDesktopProvider()
             ),
+        )
+
+        #
+        # Shared by every filesystem tool, so they all sandbox to the
+        # same workspace. create_missing_directories/
+        # overwrite_existing_files default to permissive here (an
+        # agent needs to actually be able to save results without
+        # every call failing) -- the real safety boundary is the
+        # workspace jail itself (no absolute paths, no symlinks,
+        # every path resolved and checked against the workspace
+        # root), not these write-mode conveniences.
+        #
+        self._filesystem_config = (
+            filesystem_config
+            if filesystem_config is not None
+            else FilesystemConfig(
+                create_missing_directories=True,
+                overwrite_existing_files=True,
+            )
         )
 
     # ------------------------------------------------------------------
@@ -171,6 +213,21 @@ class BuiltinToolFactory:
         return self._desktop_sessions
 
     # ------------------------------------------------------------------
+    # Filesystem
+    # ------------------------------------------------------------------
+
+    @property
+    def filesystem_config(
+        self,
+    ) -> FilesystemConfig:
+        """
+        Shared sandboxing configuration used by every filesystem
+        tool.
+        """
+
+        return self._filesystem_config
+
+    # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
 
@@ -182,11 +239,19 @@ class BuiltinToolFactory:
         """
         sessions = self._browser_sessions
         desktop = self._desktop_sessions
+        fs_config = self._filesystem_config
 
         return (
             EchoTool(),
             ExecuteCommandTool(),
-            ReadFileTool(),
+            ReadFileTool(config=fs_config),
+            WriteFileTool(config=fs_config),
+            AppendFileTool(config=fs_config),
+            ListDirectoryTool(config=fs_config),
+            CreateDirectoryTool(config=fs_config),
+            DeleteFileTool(config=fs_config),
+            CopyFileTool(config=fs_config),
+            MoveFileTool(config=fs_config),
             NavigateTool(sessions=sessions),
             ClickTool(sessions=sessions),
             FillTool(sessions=sessions),
