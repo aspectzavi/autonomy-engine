@@ -47,6 +47,25 @@ class ToolManager:
             )
         )
 
+        #
+        # An injected ToolExecutor arrives with its own registry --
+        # the DI container auto-constructs ToolExecutor (a concrete
+        # class), and that auto-constructed instance gets a fresh,
+        # empty ToolRegistry that nothing ever registers into. The
+        # manager would then register tools into self._registry
+        # while the executor resolved them against a different,
+        # permanently-empty one, so every execute() raised
+        # ToolNotFoundError even for correctly registered tools.
+        #
+        # Re-point the executor at this manager's registry so the
+        # two can never drift apart, regardless of how the executor
+        # was supplied.
+        #
+        if self._executor.registry is not self._registry:
+            self._executor = ToolExecutor(
+                self._registry,
+            )
+
     # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------

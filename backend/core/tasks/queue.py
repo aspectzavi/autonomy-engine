@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from heapq import heappop, heappush
 from itertools import count
 
+from backend.core.tasks.exceptions import EmptyTaskQueueError
 from backend.core.tasks.task import Task
 
 
@@ -50,9 +51,15 @@ class TaskQueue:
         Remove and return the next task.
 
         Raises:
-            IndexError:
-                If the queue is empty.
+            EmptyTaskQueueError:
+                If the queue is empty. Subclasses IndexError, so
+                existing `except IndexError` callers are unaffected.
         """
+        if not self._queue:
+            raise EmptyTaskQueueError(
+                "Cannot dequeue from an empty task queue.",
+            )
+
         _, _, task = heappop(self._queue)
         return task
 
@@ -61,9 +68,15 @@ class TaskQueue:
         Return the next task without removing it.
 
         Raises:
-            IndexError:
-                If the queue is empty.
+            EmptyTaskQueueError:
+                If the queue is empty. Subclasses IndexError, so
+                existing `except IndexError` callers are unaffected.
         """
+        if not self._queue:
+            raise EmptyTaskQueueError(
+                "Cannot peek at an empty task queue.",
+            )
+
         _, _, task = self._queue[0]
         return task
 

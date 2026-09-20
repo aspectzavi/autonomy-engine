@@ -23,7 +23,27 @@ class ToolExecutor:
         self,
         registry: ToolRegistry | None = None,
     ) -> None:
-        self._registry = registry or ToolRegistry()
+        #
+        # NOTE: must be `is None`, not `registry or ToolRegistry()`.
+        # ToolRegistry defines __len__, so an injected-but-EMPTY
+        # registry evaluates as falsy and would be silently replaced
+        # by a new, disconnected one. This mattered in practice:
+        # ToolManager correctly passes its own registry in here, but
+        # that registry is always empty at construction time (tools
+        # are only registered later, by ToolService.on_start()), so
+        # `or` discarded it every single time. The executor ended up
+        # permanently pointed at a different, forever-empty registry
+        # than the one register() writes to -- meaning
+        # ToolManager.execute() raised ToolNotFoundError for every
+        # tool, even correctly registered ones. Same bug class
+        # already fixed in AgentManager, ToolManager, and
+        # TaskScheduler.
+        #
+        self._registry = (
+            registry
+            if registry is not None
+            else ToolRegistry()
+        )
 
     # ------------------------------------------------------------------
     # Properties

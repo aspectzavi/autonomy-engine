@@ -6,6 +6,7 @@ Task implementation that executes a registered tool.
 
 from __future__ import annotations
 
+from backend.core.tasks.exceptions import TaskExecutionError
 from backend.core.tasks.task import Task
 from backend.core.tasks.context import TaskContext
 from backend.core.tools.context import ToolContext
@@ -72,12 +73,30 @@ class ToolTask(Task):
     ) -> ToolResult:
         """
         Execute the configured tool.
+
+        Raises:
+            TaskExecutionError:
+                If the tool reports failure. Task.execute() only
+                treats a raised exception as failure -- a returned
+                value is always wrapped as a successful TaskResult
+                -- so a failed ToolResult has to be raised here, or
+                the tool's failure would be silently reported as a
+                succeeded task (and would publish task.completed
+                rather than task.failed).
         """
 
-        return await self.tool_manager.execute(
+        result = await self.tool_manager.execute(
             tool=self.tool,
             context=self.tool_context,
         )
+
+        if not result.success:
+            raise TaskExecutionError(
+                result.error
+                or f"Tool '{self.tool}' failed.",
+            )
+
+        return result
 
     # ------------------------------------------------------------------
     # Diagnostics
